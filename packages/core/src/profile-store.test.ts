@@ -1,9 +1,9 @@
 import { expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 import {
-  loadConfig, addProfile, removeProfile, setActive,
+  loadConfig, saveConfig, addProfile, removeProfile, setActive,
   getProfile, resolveProfileName,
 } from "./profile-store";
 import { profileDir } from "./paths";
@@ -113,4 +113,64 @@ test("resolveProfileName throws when no profiles exist", async () => {
 test("resolveProfileName throws for an unknown override", async () => {
   await addProfile("work", "subscription");
   expect(resolveProfileName("ghost")).rejects.toThrow("not found");
+});
+
+// Finding 1: APFS is case-insensitive by default, so "work" and "Work"
+// would otherwise land on the same directory. The duplicate check must
+// catch this regardless of casing.
+test("addProfile rejects a duplicate that differs only in case (Finding 1)", async () => {
+  await addProfile("work", "subscription");
+  await expect(addProfile("Work", "api-key")).rejects.toThrow("already exists");
+  const c = await loadConfig();
+  expect(c.profiles).toEqual([{ name: "work", kind: "subscription" }]);
+});
+
+test("case-insensitive lookups resolve to the stored casing (Finding 1)", async () => {
+  await addProfile("work", "subscription");
+  expect(await getProfile("WORK")).toEqual({ name: "work", kind: "subscription" });
+  expect(await resolveProfileName("Work")).toBe("work");
+  await setActive("WORK");
+  expect((await loadConfig()).active).toBe("work");
+});
+
+// Finding 2: removeProfile must destroy external resources (dir, Keychain)
+// before committing the config change, so a mid-failure leaves the profile
+// still listed (and the operation retryable) instead of silently vanishing
+// from `ccm list` while its data survives as an orphan.
+test("removeProfile does not remove the config entry when directory removal fails (Finding 2)", async () => {
+  await addProfile("work", "subscription");
+  const dir = profileDir("work");
+  await writeFile(join(dir, "locked.txt"), "session data");
+  // Strip write permission on the directory itself: recursive rm must
+  // unlink "locked.txt" first, which requires write access on its parent.
+  await chmod(dir, 0o500);
+  try {
+    await expect(removeProfile("work")).rejects.toThrow();
+    const c = await loadConfig();
+    expect(c.profiles).toEqual([{ name: "work", kind: "subscription" }]);
+  } finally {
+    await chmod(dir, 0o700);
+  }
+});
+
+// Finding 3: a hand-edited/corrupted config.json can contain a traversal
+// name. removeProfile must re-validate the stored name against NAME_RE
+// before any destructive filesystem call, rather than trusting the entry.
+test("removeProfile rejects a tampered traversal name and never touches the outside directory (Finding 3)", async () => {
+  const victim = await mkdtemp(join(tmpdir(), "ccm-victim-"));
+  try {
+    // dir (CCM_HOME) = <tmp>/ccm-store-XXXX, so two levels up from
+    // "profiles" is <tmp> itself — the same parent that holds `victim`.
+    const evilName = `../../${basename(victim)}`;
+    await saveConfig({
+      profiles: [{ name: evilName, kind: "subscription" }],
+      active: evilName,
+      failoverEnabled: true,
+      failoverOrder: [evilName],
+    });
+    await expect(removeProfile(evilName)).rejects.toThrow("Invalid profile name");
+    expect((await stat(victim)).isDirectory()).toBe(true);
+  } finally {
+    await rm(victim, { recursive: true, force: true });
+  }
 });
