@@ -1,0 +1,10 @@
+{
+  "name": "@ccm/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "ccm": "./src/index.ts" },
+  "dependencies": {
+    "@ccm/core": "workspace:*",
+    "commander": "^12.1.0"
+  }
+}
