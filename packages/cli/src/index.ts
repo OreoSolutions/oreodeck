@@ -2,6 +2,8 @@
 import { Command } from "commander";
 import { listCommand } from "./commands/list";
 import { useCommand } from "./commands/use";
+import { addCommand } from "./commands/add";
+import { removeCommand } from "./commands/remove";
 
 const program = new Command();
 
@@ -20,6 +22,20 @@ program
   .description("Set the active profile")
   .argument("<name>", "profile name")
   .action(useCommand);
+
+program
+  .command("add")
+  .description("Add a profile (subscription by default)")
+  .argument("<name>", "profile name")
+  .option("--api-key", "create an API key profile instead of a subscription login")
+  .action(addCommand);
+
+program
+  .command("remove")
+  .description("Remove a profile and its data")
+  .argument("<name>", "profile name")
+  .option("-y, --yes", "skip the confirmation prompt")
+  .action(removeCommand);
 
 // Mọi lỗi ném ra từ command đều in ra stderr và exit 1 — không dump stack trace.
 try {
