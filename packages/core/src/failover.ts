@@ -1,7 +1,10 @@
 import { spawn } from "node:child_process";
+import { cp, mkdir, readdir, stat } from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 import { loadConfig, saveConfig, getProfile } from "./profile-store";
 import { buildEnv } from "./launcher";
 import { getApiKey } from "./keychain";
+import { profileDir } from "./paths";
 
 const RATE_LIMIT_PATTERNS = [
   /usage limit reached/i,
@@ -118,4 +121,54 @@ export async function runHeadlessWithFailover(
     console.error(`Profile "${current}" hit its limit — retrying with "${next}".`);
     current = next;
   }
+}
+
+type SessionCandidate = { id: string; path: string; mtime: number };
+
+// Đệ quy trả về "best" thay vì gán vào biến ở scope ngoài: TS mất khả năng
+// narrow một `let` bị gán bên trong closure lồng nhau (đọc lại ở scope
+// ngoài sau `await walk(...)` báo lỗi "never" dù type đã annotate rõ ràng
+// — xem repro trong PR). Trả giá trị ra ngoài tránh hẳn vấn đề đó.
+async function walkForLatestSession(d: string): Promise<SessionCandidate | null> {
+  let items;
+  try {
+    items = await readdir(d, { withFileTypes: true });
+  } catch {
+    return null;
+  }
+  let best: SessionCandidate | null = null;
+  for (const it of items) {
+    const p = join(d, it.name);
+    if (it.isDirectory()) {
+      const found = await walkForLatestSession(p);
+      if (found && (!best || found.mtime > best.mtime)) best = found;
+    } else if (it.name.endsWith(".jsonl")) {
+      const m = (await stat(p)).mtimeMs;
+      if (!best || m > best.mtime) {
+        best = { id: it.name.replace(/\.jsonl$/, ""), path: p, mtime: m };
+      }
+    }
+  }
+  return best;
+}
+
+/** Tìm transcript được sửa gần nhất của một profile — đó là session đang chạy. */
+export async function findLatestSession(
+  profileName: string,
+): Promise<{ id: string; path: string } | null> {
+  const root = join(profileDir(profileName), "projects");
+  const found = await walkForLatestSession(root);
+  return found ? { id: found.id, path: found.path } : null;
+}
+
+/** Copy transcript sang profile khác, giữ nguyên đường dẫn tương đối để --resume tìm thấy. */
+export async function copySessionToProfile(
+  sessionPath: string,
+  fromProfile: string,
+  toProfile: string,
+): Promise<void> {
+  const rel = relative(profileDir(fromProfile), sessionPath);
+  const dest = join(profileDir(toProfile), rel);
+  await mkdir(dirname(dest), { recursive: true });
+  await cp(sessionPath, dest);
 }

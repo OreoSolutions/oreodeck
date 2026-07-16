@@ -87,3 +87,49 @@ test("two profiles yield two distinct CLAUDE_CONFIG_DIR values, neither the real
   expect(workDirLine).not.toContain(realClaudeDir);
   expect(personalDirLine).not.toContain(realClaudeDir);
 });
+
+// promptConfirm dùng readline trên process.stdin; khi stdin là pipe (không
+// TTY) nó vẫn đọc được một dòng bình thường, nên các test dưới đây pipe
+// "n\n"/"" vào stdin để lái interactive loop mà không cần TTY thật.
+test("interactive claude on a clean exit launches once and never prompts", async () => {
+  await addProfile("work", "subscription");
+  const proc = Bun.spawn(["bun", CLI, "claude", "-P", "work"], {
+    env: { ...process.env, CCM_HOME: dir, CCM_CLAUDE_BIN: FAKE },
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  proc.stdin.end();
+  const [stdout, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    proc.exited,
+  ]);
+  expect(code).toBe(0);
+  expect(stdout).not.toContain("[y/N]");
+  // ARGS= xuất hiện đúng một lần: fake binary chỉ chạy một lần duy nhất.
+  expect(stdout.match(/ARGS=/g)?.length).toBe(1);
+});
+
+test("interactive claude on a non-zero exit prompts, and declining does not relaunch", async () => {
+  await addProfile("work", "subscription");
+  await addProfile("personal", "subscription");
+  const LIMITED = join(import.meta.dir, "..", "test", "fake-claude-limited.sh");
+  const proc = Bun.spawn(["bun", CLI, "claude", "-P", "work"], {
+    env: { ...process.env, CCM_HOME: dir, CCM_CLAUDE_BIN: LIMITED },
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  proc.stdin.write("n\n");
+  proc.stdin.end();
+  const [stdout, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    proc.exited,
+  ]);
+  // Declining keeps the child's own exit code (1) rather than a hardcoded value.
+  expect(code).toBe(1);
+  expect(stdout).toContain('Continue this conversation on "personal"?');
+  // fake-claude-limited.sh's rate-limit line appears exactly once — no retry launch.
+  expect(stdout.match(/Claude usage limit reached/g)?.length).toBe(1);
+  expect(stdout).not.toContain("OK from personal");
+});

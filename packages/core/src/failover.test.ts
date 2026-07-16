@@ -8,8 +8,11 @@ import {
   nextProfile,
   setFailoverOrder,
   setFailoverEnabled,
+  findLatestSession,
+  copySessionToProfile,
 } from "./failover";
 import { addProfile, loadConfig } from "./profile-store";
+import { profileDir } from "./paths";
 
 let dir: string;
 
@@ -96,4 +99,32 @@ test("setFailoverOrder keeps unlisted profiles at the tail, matched case-insensi
   await addProfile("c", "subscription");
   await setFailoverOrder(["C"]);
   expect((await loadConfig()).failoverOrder).toEqual(["c", "a", "b"]);
+});
+
+test("findLatestSession returns the most recently modified transcript", async () => {
+  await addProfile("work", "subscription");
+  const proj = join(profileDir("work"), "projects", "demo");
+  await mkdir(proj, { recursive: true });
+  await writeFile(join(proj, "old.jsonl"), "{}\n");
+  await new Promise((r) => setTimeout(r, 10));
+  await writeFile(join(proj, "new.jsonl"), "{}\n");
+  const found = await findLatestSession("work");
+  expect(found?.id).toBe("new");
+});
+
+test("findLatestSession returns null when the profile has no transcripts", async () => {
+  await addProfile("fresh", "subscription");
+  expect(await findLatestSession("fresh")).toBeNull();
+});
+
+test("copySessionToProfile mirrors the relative path into the target profile", async () => {
+  await addProfile("work", "subscription");
+  await addProfile("personal", "subscription");
+  const proj = join(profileDir("work"), "projects", "demo");
+  await mkdir(proj, { recursive: true });
+  const src = join(proj, "s1.jsonl");
+  await writeFile(src, "{}\n");
+  await copySessionToProfile(src, "work", "personal");
+  const dest = join(profileDir("personal"), "projects", "demo", "s1.jsonl");
+  expect((await fsStat(dest)).isFile()).toBe(true);
 });
