@@ -1,6 +1,6 @@
 import { expect, test, afterEach } from "bun:test";
 import { isAbsolute } from "node:path";
-import { ccmHome, profileDir, configPath } from "./paths";
+import { assertValidName, ccmHome, profileDir, configPath } from "./paths";
 
 afterEach(() => {
   delete process.env.CCM_HOME;
@@ -64,6 +64,26 @@ test("ccmHome never returns a CWD-relative path, for any CCM_HOME value", () => 
 test("profileDir builds path under profiles/", () => {
   process.env.CCM_HOME = "/tmp/test-ccm";
   expect(profileDir("work")).toBe("/tmp/test-ccm/profiles/work");
+});
+
+// I-2: profileDir() is the single chokepoint every filesystem/spawn path
+// derives from (launcher, failover, usage, add-login), so it must reject a
+// traversal name itself rather than relying on each caller to re-validate.
+test("profileDir rejects a traversal name", () => {
+  process.env.CCM_HOME = "/tmp/test-ccm";
+  expect(() => profileDir("../x")).toThrow("Invalid profile name");
+  expect(() => profileDir("../../../../tmp/x")).toThrow("Invalid profile name");
+});
+
+test("profileDir rejects an empty or malformed name", () => {
+  process.env.CCM_HOME = "/tmp/test-ccm";
+  expect(() => profileDir("")).toThrow("Invalid profile name");
+  expect(() => profileDir("has space")).toThrow("Invalid profile name");
+});
+
+test("assertValidName is the single source of truth profileDir uses", () => {
+  expect(() => assertValidName("work")).not.toThrow();
+  expect(() => assertValidName("../evil")).toThrow("Invalid profile name");
 });
 
 test("configPath is config.json under home", () => {

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { addProfile, setApiKey, profileDir, removeProfile } from "@ccm/core";
+import { addProfile, setApiKey, removeProfile, buildEnv } from "@ccm/core";
 import { promptHidden } from "../prompt";
 
 interface AddOptions {
@@ -38,15 +38,19 @@ export async function addCommand(name: string, opts: AddOptions): Promise<void> 
   if (process.env.CCM_SKIP_LOGIN) return;
 
   console.log("Opening Claude Code to sign in — run /login, then /exit when done.");
+  // Route through buildEnv (not a hand-rolled env object) so this spawn gets
+  // the same guarantees as launcher/failover: CLAUDE_CONFIG_DIR pinned to
+  // this profile, and — critically for a subscription /login — any
+  // ANTHROPIC_API_KEY inherited from the shell stripped, since a stray key
+  // silently overrides OAuth and sabotages the login flow (F-4).
+  const env = await buildEnv({ name, kind: "subscription" }, null, process.env);
+  const bin = process.env.CCM_CLAUDE_BIN ?? "claude"; // F-5: match launcher/failover.
   await new Promise<void>((resolve, reject) => {
-    const child = spawn("claude", [], {
-      stdio: "inherit",
-      env: { ...process.env, CLAUDE_CONFIG_DIR: profileDir(name) },
-    });
+    const child = spawn(bin, [], { stdio: "inherit", env });
     child.on("error", (err) =>
       reject(
         (err as NodeJS.ErrnoException).code === "ENOENT"
-          ? new Error("`claude` not found on PATH. Install Claude Code first.")
+          ? new Error(`\`${bin}\` not found on PATH. Install Claude Code first.`)
           : err,
       ),
     );

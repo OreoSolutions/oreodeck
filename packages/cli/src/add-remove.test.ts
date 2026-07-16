@@ -77,3 +77,24 @@ test("remove of an unknown profile exits 1", async () => {
   expect(code).toBe(1);
   expect(stderr).toContain("not found");
 });
+
+// F-4/F-5: the subscription /login spawn must go through the same env
+// guarantees as launcher/failover — strip an inherited ANTHROPIC_API_KEY
+// (a stray shell key silently sabotages OAuth login) — and honor
+// CCM_CLAUDE_BIN like every other spawn site, instead of hardcoding
+// spawn("claude").
+test("add's login spawn strips ANTHROPIC_API_KEY and honors CCM_CLAUDE_BIN (F-4, F-5)", async () => {
+  const FAKE = join(import.meta.dir, "..", "test", "fake-claude.sh");
+  const proc = Bun.spawn(["bun", CLI, "add", "work"], {
+    env: { ...process.env, CCM_HOME: dir, CCM_CLAUDE_BIN: FAKE, ANTHROPIC_API_KEY: "sk-ant-stray-shell-key" },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+  expect(code).toBe(0);
+  // The fake binary actually ran (F-5: CCM_CLAUDE_BIN honored, not a bare
+  // spawn("claude") that would ENOENT in this sandboxed PATH).
+  expect(stdout).toContain(`CLAUDE_CONFIG_DIR=${profileDir("work")}`);
+  // The inherited shell key never reached the login child (F-4).
+  expect(stdout).toContain("ANTHROPIC_API_KEY=<unset>");
+});

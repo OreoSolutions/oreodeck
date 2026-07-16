@@ -1,5 +1,5 @@
 import { mkdir, rm } from "node:fs/promises";
-import { configPath, profileDir } from "./paths";
+import { assertValidName, configPath, profileDir } from "./paths";
 import { readJson, writeJsonAtomic } from "./atomic";
 import { deleteApiKey } from "./keychain";
 
@@ -15,22 +15,6 @@ export interface Config {
   active: string | null;
   failoverEnabled: boolean;
   failoverOrder: string[];
-}
-
-/** Tên profile thành tên thư mục, nên phải chặn path traversal. */
-const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-
-/**
- * Chặn path traversal / tên bất hợp lệ trước bất kỳ thao tác nào đụng tới
- * filesystem (mkdir, rm) hoặc Keychain. Dùng cho cả input từ CLI lẫn tên
- * đọc lại từ config.json — config có thể bị sửa tay/hỏng.
- */
-function assertValidName(name: string): void {
-  if (!NAME_RE.test(name)) {
-    throw new Error(
-      `Invalid profile name: ${JSON.stringify(name)}. Use letters, digits, - and _ (max 64 chars).`,
-    );
-  }
 }
 
 /**

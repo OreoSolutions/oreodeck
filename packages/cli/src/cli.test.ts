@@ -63,3 +63,24 @@ test("use with an unknown profile exits 1 with an error", async () => {
   expect(code).toBe(1);
   expect(stderr).toContain("not found");
 });
+
+// F-7: bare `ccm` should behave like `--help` (print help, exit 0), not
+// commander's default "missing subcommand" path which exits 1.
+test("bare ccm with no args prints help and exits 0", async () => {
+  const { stdout, code } = await ccm();
+  expect(code).toBe(0);
+  expect(stdout).toContain("Usage: ccm");
+  expect(stdout).toContain("Commands:");
+});
+
+test("ccm --help still exits 0 and prints help", async () => {
+  const { stdout, code } = await ccm("--help");
+  expect(code).toBe(0);
+  expect(stdout).toContain("Usage: ccm");
+});
+
+test("an unknown command still exits nonzero", async () => {
+  const { stderr, code } = await ccm("bogus-command");
+  expect(code).not.toBe(0);
+  expect(stderr).toContain("unknown command");
+});

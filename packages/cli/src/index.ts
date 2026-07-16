@@ -74,6 +74,19 @@ program
   .description("Print a shell snippet that routes `claude` through ccm")
   .action(shellInitCommand);
 
+// F-7: bare `ccm` (no args at all) should behave like `--help` — print help
+// and exit 0 — rather than commander's default "missing subcommand" path,
+// which calls `this.help({ error: true })` internally and exits 1 (a
+// synchronous process.exit(), so it can't be caught below). Intercepting
+// here, before parseAsync ever runs, only touches the truly-empty-args
+// case: `--help`/`-h` still go through commander's normal (exit 0) path,
+// and an unknown command like `ccm bogus` still reaches commander's
+// unknownCommand() handling (exit 1) since argv has at least one operand.
+if (process.argv.length <= 2) {
+  program.outputHelp();
+  process.exit(0);
+}
+
 // Mọi lỗi ném ra từ command đều in ra stderr và exit 1 — không dump stack trace.
 try {
   await program.parseAsync(process.argv);

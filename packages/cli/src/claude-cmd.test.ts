@@ -1,9 +1,9 @@
 import { expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { addProfile, profileDir } from "@ccm/core";
+import { addProfile, profileDir, saveConfig } from "@ccm/core";
 
 let dir: string;
 const CLI = join(import.meta.dir, "index.ts");
@@ -86,6 +86,28 @@ test("two profiles yield two distinct CLAUDE_CONFIG_DIR values, neither the real
   const realClaudeDir = join(homedir(), ".claude");
   expect(workDirLine).not.toContain(realClaudeDir);
   expect(personalDirLine).not.toContain(realClaudeDir);
+});
+
+// I-2: a hand-edited/corrupted config.json (or an attacker-chosen -P value
+// that happens to match one) can carry a traversal name. profileDir() must
+// reject it at the chokepoint before any spawn or filesystem write happens
+// — reproduces the reviewer's `ccm claude -P "../../../../../../tmp/..."`
+// finding with a fake binary instead of the real `claude`.
+test("claude -P with a path-traversal profile name fails clean and never spawns (I-2)", async () => {
+  await saveConfig({
+    profiles: [{ name: "../evil", kind: "subscription" }],
+    active: null,
+    failoverEnabled: true,
+    failoverOrder: ["../evil"],
+  });
+  const { stdout, stderr, code } = await ccm("claude", "-P", "../evil");
+  expect(code).toBe(1);
+  expect(stderr).toContain("Invalid profile name");
+  // The fake binary never ran: no CLAUDE_CONFIG_DIR/ARGS line was printed.
+  expect(stdout).not.toContain("CLAUDE_CONFIG_DIR=");
+  expect(stdout).not.toContain("ARGS=");
+  // Nothing was created outside CCM_HOME (one level up from `profiles/`).
+  await expect(stat(join(dir, "evil"))).rejects.toThrow();
 });
 
 // promptConfirm dùng readline trên process.stdin; khi stdin là pipe (không

@@ -27,8 +27,33 @@ export function profilesDir(): string {
   return join(ccmHome(), "profiles");
 }
 
-/** CLAUDE_CONFIG_DIR của một profile. */
+/** Tên profile thành tên thư mục, nên phải chặn path traversal. */
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+/**
+ * Chặn path traversal / tên bất hợp lệ trước bất kỳ thao tác nào đụng tới
+ * filesystem hoặc spawn. Nguồn duy nhất của rule này — profile-store.ts
+ * import lại hàm này thay vì tự định nghĩa NAME_RE riêng, để tránh hai bản
+ * lệch nhau. Dùng cho cả input từ CLI lẫn tên đọc lại từ config.json —
+ * config có thể bị sửa tay/hỏng.
+ */
+export function assertValidName(name: string): void {
+  if (!NAME_RE.test(name)) {
+    throw new Error(
+      `Invalid profile name: ${JSON.stringify(name)}. Use letters, digits, - and _ (max 64 chars).`,
+    );
+  }
+}
+
+/**
+ * CLAUDE_CONFIG_DIR của một profile. Đây là chokepoint duy nhất: mọi đường
+ * dẫn filesystem/spawn phái sinh từ profile name (launcher, failover, usage,
+ * add-login) đều đi qua profileDir(), nên validate ở đây chặn traversal cho
+ * toàn bộ những nơi đó cùng lúc — kể cả khi tên đến từ config.json bị sửa
+ * tay/hỏng, chứ không chỉ từ input CLI hợp lệ.
+ */
 export function profileDir(name: string): string {
+  assertValidName(name);
   return join(profilesDir(), name);
 }
 

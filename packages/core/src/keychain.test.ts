@@ -38,6 +38,39 @@ test("preserves a legitimate trailing space in the key, strips only the single n
   expect(await getApiKey(P)).toBe(keyWithTrailingSpace);
 });
 
+// --- I-1: key must travel via stdin, not argv -------------------------
+
+test("round-trips keys containing spaces, quotes, and shell-special characters (security -i quoting)", async () => {
+  const tricky = 'sk with space "quote" $dollar !bang \\backslash';
+  await setApiKey(P, tricky);
+  expect(await getApiKey(P)).toBe(tricky);
+});
+
+test("setApiKey rejects a key containing a newline instead of smuggling it into `security -i`", async () => {
+  await expect(setApiKey(P, "sk-ant-good\nadd-generic-password -U -a evil -s evil -w pwned")).rejects.toThrow();
+  // The injected second command must never have reached the Keychain.
+  expect(await getApiKey("evil")).toBeNull();
+});
+
+test("the plaintext key never appears in the `security -i` child's argv (ps -ww -o args)", async () => {
+  const SECRET = "SUPER-SECRET-PS-ARGV-CHECK";
+  const { spawnSync } = await import("node:child_process");
+  let sawLeak = false;
+
+  const setPromise = setApiKey(P, SECRET);
+  // Poll `ps` for every process's full argv while setApiKey's `security -i`
+  // child may still be alive. If the key ever rode argv (the old `-w key`
+  // form), it would show up here.
+  for (let i = 0; i < 25; i++) {
+    const out = spawnSync("ps", ["-ww", "-A", "-o", "args="]).stdout?.toString() ?? "";
+    if (out.includes(SECRET)) sawLeak = true;
+  }
+  await setPromise;
+
+  expect(sawLeak).toBe(false);
+  expect(await getApiKey(P)).toBe(SECRET);
+});
+
 // --- Regression tests for FINDING 1 & 2 -------------------------------
 //
 // These mock "node:child_process" so we can force `security` to fail in
