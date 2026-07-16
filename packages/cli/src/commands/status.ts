@@ -40,22 +40,59 @@ function pad(text: string, width: number, align: "left" | "right"): string {
   return align === "right" ? text.padStart(width) : text.padEnd(width);
 }
 
+// Hard cap on total table width. NAME_RE (packages/core/src/profile-store.ts)
+// allows profile names up to 64 chars, and the profile column otherwise
+// grows 1:1 with the name, so an unbounded PROFILE column blows past any
+// terminal width for long-but-legal names. Truncating is display-only: the
+// stored name (ProfileUsage, config.json) never changes.
+const TABLE_WIDTH = 80;
+const ELLIPSIS = "…";
+
+/**
+ * Shortens `text` to at most `maxWidth` visible characters, replacing the
+ * last one with an ellipsis when truncation happens, so the user can always
+ * tell a name was cut rather than mistaking it for the full value.
+ */
+function truncate(text: string, maxWidth: number): string {
+  if (text.length <= maxWidth) return text;
+  if (maxWidth <= ELLIPSIS.length) return ELLIPSIS.slice(0, Math.max(maxWidth, 0));
+  return `${text.slice(0, maxWidth - ELLIPSIS.length)}${ELLIPSIS}`;
+}
+
 /**
  * Pure renderer: rows -> lines (header first). Column widths self-adjust to
  * the widest cell (header or data) per column, same as before. Split out
  * from statusCommand so width can be measured directly against worst-case
  * inputs in tests, without going through config/usage I/O.
+ *
+ * The PROFILE column is the exception: it is truncated (with a trailing
+ * "…") to whatever width remains after every other column and separator
+ * claims its space, so the rendered table never exceeds TABLE_WIDTH
+ * columns regardless of profile name length (1-64 chars, see NAME_RE).
  */
 export function renderUsageTable(rows: Row[]): string[] {
-  const widths = COLUMNS.map((col) =>
+  const numericColumns = COLUMNS.filter((col) => col.key !== "profile");
+  const numericWidths = numericColumns.map((col) =>
     Math.max(col.header.length, ...rows.map((r) => r[col.key].length)),
+  );
+  const separatorsWidth = COLUMNS.length - 1; // one COLUMN_SEPARATOR between each pair
+  const profileHeaderWidth = COLUMNS[0]!.header.length; // "PROFILE"
+  const profileBudget = Math.max(
+    profileHeaderWidth,
+    TABLE_WIDTH - separatorsWidth - numericWidths.reduce((sum, w) => sum + w, 0),
+  );
+
+  const displayRows = rows.map((r) => ({ ...r, profile: truncate(r.profile, profileBudget) }));
+
+  const widths = COLUMNS.map((col) =>
+    Math.max(col.header.length, ...displayRows.map((r) => r[col.key].length)),
   );
 
   const headerLine = COLUMNS.map((col, i) => pad(col.header, widths[i]!, col.align))
     .join(COLUMN_SEPARATOR)
     .trimEnd();
 
-  const rowLines = rows.map((row) =>
+  const rowLines = displayRows.map((row) =>
     COLUMNS.map((col, i) => pad(row[col.key], widths[i]!, col.align))
       .join(COLUMN_SEPARATOR)
       .trimEnd(),

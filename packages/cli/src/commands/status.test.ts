@@ -53,3 +53,28 @@ test("status table renders the active marker and profile name together", () => {
   const [, row] = renderUsageTable([worstCaseRow()]);
   expect(row).toMatch(/^\*\s+aaaaaaaaaaaa/);
 });
+
+/**
+ * NAME_RE (packages/core/src/profile-store.ts) permits profile names up to
+ * 64 chars. Combined with 7-figure counts in every numeric column (the same
+ * worst case as worstCaseRow, but with the longest legal name instead of a
+ * 12-char one), this is the true worst case for table width — a reviewer
+ * measured 132 columns for this exact input before the fix.
+ */
+function longestNameWorstCaseRow(): Row {
+  const row = worstCaseRow();
+  return { ...row, profile: `* ${"a".repeat(64)}` };
+}
+
+test("status table stays within 80 columns for a 64-char (max legal) profile name", () => {
+  const lines = renderUsageTable([longestNameWorstCaseRow()]);
+  expect(lines.length).toBe(2); // header + one row
+  for (const line of lines) {
+    expect(line.length).toBeLessThanOrEqual(80);
+  }
+});
+
+test("status table visibly marks a truncated profile name with an ellipsis", () => {
+  const [, row] = renderUsageTable([longestNameWorstCaseRow()]);
+  expect(row).toContain("…");
+});

@@ -3,17 +3,22 @@ import { isAbsolute, join, resolve } from "node:path";
 
 /**
  * Thư mục gốc chứa mọi dữ liệu của ccm. CCM_HOME cho phép override (dùng khi
- * test). Một CCM_HOME rỗng ("") bị coi như chưa set — fallback về ~/.ccm —
- * vì `""` gần như luôn là lỗi shell (unquoted expansion của biến rỗng) chứ
- * không phải ý định thật, và `join("", ...)` sẽ âm thầm tạo đường dẫn
- * tương đối theo CWD, ghi dữ liệu vào nơi không ngờ tới. Một CCM_HOME
- * tương đối hợp lệ (vd "./foo") được resolve thành tuyệt đối dựa trên CWD
- * hiện tại, thay vì bị reject — điều này khớp với cách hầu hết CLI tool xử
- * lý override path tương đối (git, docker, ...), và giữ bất biến "ccmHome()
- * luôn tuyệt đối" mà không làm bể lệnh của người dùng.
+ * test). Một CCM_HOME rỗng ("") hoặc chỉ chứa khoảng trắng (" ", "\t", "\n",
+ * ...) bị coi như chưa set — fallback về ~/.ccm — vì cả hai đều gần như
+ * luôn là lỗi shell (unquoted expansion của biến rỗng, hoặc giá trị dán
+ * nhầm khoảng trắng) chứ không phải ý định thật. Nếu không trim trước khi
+ * kiểm tra, `" "` sẽ vượt qua check `!override` (nó truthy) rồi rơi vào
+ * `resolve(" ")`, âm thầm tạo đường dẫn tương đối theo CWD giống hệt lỗi
+ * gốc với `""`. Giá trị sau khi trim được dùng để resolve — không dùng giá
+ * trị gốc — nên `" ./foo "` vẫn resolve đúng thành `<cwd>/foo` thay vì một
+ * đường dẫn có khoảng trắng ở đầu/cuối. Một CCM_HOME tương đối hợp lệ (vd
+ * "./foo") được resolve thành tuyệt đối dựa trên CWD hiện tại, thay vì bị
+ * reject — điều này khớp với cách hầu hết CLI tool xử lý override path
+ * tương đối (git, docker, ...), và giữ bất biến "ccmHome() luôn tuyệt đối"
+ * mà không làm bể lệnh của người dùng.
  */
 export function ccmHome(): string {
-  const override = process.env.CCM_HOME;
+  const override = process.env.CCM_HOME?.trim();
   if (!override) return join(homedir(), ".ccm");
   return isAbsolute(override) ? override : resolve(override);
 }
