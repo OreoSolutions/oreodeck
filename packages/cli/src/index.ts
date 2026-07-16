@@ -6,6 +6,12 @@ import { addCommand } from "./commands/add";
 import { removeCommand } from "./commands/remove";
 import { claudeCommand } from "./commands/claude";
 import { statusCommand } from "./commands/status";
+import {
+  failoverOnCommand,
+  failoverOffCommand,
+  failoverOrderCommand,
+  failoverShowCommand,
+} from "./commands/failover";
 
 const program = new Command();
 
@@ -51,6 +57,16 @@ program
   .command("status")
   .description("Show token usage per profile for the current 5-hour window")
   .action(statusCommand);
+
+const failover = program.command("failover").description("Configure automatic failover");
+failover.command("on").description("Enable failover").action(failoverOnCommand);
+failover.command("off").description("Disable failover").action(failoverOffCommand);
+failover
+  .command("order")
+  .description("Set the failover order")
+  .argument("<names...>", "profile names, in order")
+  .action(failoverOrderCommand);
+failover.command("show", { isDefault: true }).description("Show failover settings").action(failoverShowCommand);
 
 // Mọi lỗi ném ra từ command đều in ra stderr và exit 1 — không dump stack trace.
 try {
