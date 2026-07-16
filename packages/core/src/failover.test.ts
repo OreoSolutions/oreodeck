@@ -128,3 +128,10 @@ test("copySessionToProfile mirrors the relative path into the target profile", a
   const dest = join(profileDir("personal"), "projects", "demo", "s1.jsonl");
   expect((await fsStat(dest)).isFile()).toBe(true);
 });
+
+test("copySessionToProfile rejects a session path outside the source profile", async () => {
+  await addProfile("work", "subscription");
+  await addProfile("personal", "subscription");
+  const outside = join(profileDir("work"), "..", "..", "evil.jsonl");
+  expect(copySessionToProfile(outside, "work", "personal")).rejects.toThrow("outside profile");
+});

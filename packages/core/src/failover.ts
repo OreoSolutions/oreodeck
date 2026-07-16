@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { cp, mkdir, readdir, stat } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { loadConfig, saveConfig, getProfile } from "./profile-store";
 import { buildEnv } from "./launcher";
 import { getApiKey } from "./keychain";
@@ -168,6 +168,9 @@ export async function copySessionToProfile(
   toProfile: string,
 ): Promise<void> {
   const rel = relative(profileDir(fromProfile), sessionPath);
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new Error(`Session path is outside profile "${fromProfile}".`);
+  }
   const dest = join(profileDir(toProfile), rel);
   await mkdir(dirname(dest), { recursive: true });
   await cp(sessionPath, dest);
