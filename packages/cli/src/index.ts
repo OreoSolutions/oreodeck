@@ -5,6 +5,7 @@ import { useCommand } from "./commands/use";
 import { addCommand } from "./commands/add";
 import { removeCommand } from "./commands/remove";
 import { claudeCommand } from "./commands/claude";
+import { statusCommand } from "./commands/status";
 
 const program = new Command();
 
@@ -45,6 +46,11 @@ program
   .allowUnknownOption()
   .argument("[args...]", "arguments forwarded to claude")
   .action(claudeCommand);
+
+program
+  .command("status")
+  .description("Show token usage per profile for the current 5-hour window")
+  .action(statusCommand);
 
 // Mọi lỗi ném ra từ command đều in ra stderr và exit 1 — không dump stack trace.
 try {
