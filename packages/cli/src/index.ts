@@ -12,6 +12,7 @@ import {
   failoverOrderCommand,
   failoverShowCommand,
 } from "./commands/failover";
+import { shellInitCommand } from "./commands/shell-init";
 
 const program = new Command();
 
@@ -67,6 +68,11 @@ failover
   .argument("<names...>", "profile names, in order")
   .action(failoverOrderCommand);
 failover.command("show", { isDefault: true }).description("Show failover settings").action(failoverShowCommand);
+
+program
+  .command("shell-init")
+  .description("Print a shell snippet that routes `claude` through ccm")
+  .action(shellInitCommand);
 
 // Mọi lỗi ném ra từ command đều in ra stderr và exit 1 — không dump stack trace.
 try {

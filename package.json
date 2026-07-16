@@ -3,6 +3,11 @@
   "private": true,
   "type": "module",
   "workspaces": ["packages/*"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "build": "bun build packages/cli/src/index.ts --compile --outfile dist/ccm"
+  },
   "devDependencies": {
     "typescript": "^5.6.0",
     "@types/node": "^22.0.0",
