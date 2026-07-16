@@ -4,6 +4,7 @@ import { listCommand } from "./commands/list";
 import { useCommand } from "./commands/use";
 import { addCommand } from "./commands/add";
 import { removeCommand } from "./commands/remove";
+import { claudeCommand } from "./commands/claude";
 
 const program = new Command();
 
@@ -36,6 +37,14 @@ program
   .argument("<name>", "profile name")
   .option("-y, --yes", "skip the confirmation prompt")
   .action(removeCommand);
+
+program
+  .command("claude")
+  .description("Run Claude Code with a profile (all extra args are passed through)")
+  .option("-P, --profile <name>", "profile to use for this run")
+  .allowUnknownOption()
+  .argument("[args...]", "arguments forwarded to claude")
+  .action(claudeCommand);
 
 // Mọi lỗi ném ra từ command đều in ra stderr và exit 1 — không dump stack trace.
 try {
