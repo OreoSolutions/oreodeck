@@ -1,0 +1,7 @@
+module ccm_spike_rsFFI {
+    header "ccm_spike_rsFFI.h"
+    export *
+    use "Darwin"
+    use "_Builtin_stdbool"
+    use "_Builtin_stdint"
+}
