@@ -6,7 +6,7 @@ pub mod commands;
 
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Emitter, Manager,
 };
 
 pub fn run() {
@@ -48,6 +48,8 @@ pub fn run() {
                         if let Some(win) = app.get_webview_window("tray") {
                             let _ = win.show();
                             let _ = win.set_focus();
+                            // Tell the popover it's actually on-screen so it can start polling.
+                            let _ = win.emit("popover-visible", true);
                         }
                     }
                 })
@@ -59,6 +61,8 @@ pub fn run() {
             if window.label() == "tray" {
                 if let tauri::WindowEvent::Focused(false) = event {
                     let _ = window.hide();
+                    // Tell the popover it's off-screen so it can stop polling.
+                    let _ = window.emit("popover-visible", false);
                 }
             }
         })
