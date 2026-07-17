@@ -10,5 +10,6 @@
     "types": ["bun-types"],
     "noEmit": true
   },
-  "include": ["packages/*/src/**/*.ts"]
+  "include": ["packages/*/src/**/*.ts"],
+  "exclude": ["packages/app"]
 }
