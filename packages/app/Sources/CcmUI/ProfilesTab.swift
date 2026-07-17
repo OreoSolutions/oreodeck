@@ -84,6 +84,20 @@ public struct ProfilesTab: View {
                 Button("Add API key…") { showAddApiKey = true }
             }
 
+            if model.cliMissing {
+                // Explains why "Open session" above is disabled — mirrors
+                // `MenuBarView`'s CLI-missing copy/style (same string, same
+                // `.caption`/`.orange` treatment) so the two surfaces read as
+                // one consistent warning instead of two invented banners.
+                // Also closes the final-review M-1/M-2 gap: the manual smoke
+                // doc claims the Profiles tab shows this warning, and before
+                // this it didn't — only the button went grey with no
+                // explanation on screen.
+                Text("The ccm CLI isn't on PATH — opening sessions won't work.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+
             if let pending = model.pendingSubscription {
                 HStack(spacing: 6) {
                     ProgressView().controlSize(.small)

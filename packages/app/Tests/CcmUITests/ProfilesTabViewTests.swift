@@ -144,6 +144,41 @@ import ViewInspector
     }))
 }
 
+// Pins the final-review M-1/M-2 fix: `docs/manual-smoke-test.md` claims the
+// Profiles tab shows a CLI-missing warning, but before this the tab only
+// disabled "Open session" with no on-screen reason (only `MenuBarView` had
+// text). Non-vacuous both ways: with the CLI present the hint must be absent
+// too, so deleting the `if model.cliMissing { Text(...) }` block from
+// `ProfilesTab.body` turns `cliMissingHint...` red, and reverting the second
+// test's setup so the CLI stays "missing" turns
+// `cliPresent...doesNotRenderTheHint` red as well.
+@MainActor
+@Test func cliMissingHintIsRenderedInTheProfilesTabWhenTheCliIsNotOnPath() async throws {
+    let backend = FakeBackend()
+    backend.set(cliInstalled: false)
+    let model = AppModel(backend: backend)
+    await model.load()
+    #expect(model.cliMissing == true)
+
+    let tab = ProfilesTab(model: model)
+    let hint = try tab.inspect().find(text: "The ccm CLI isn't on PATH — opening sessions won't work.")
+    #expect(try hint.string() == "The ccm CLI isn't on PATH — opening sessions won't work.")
+}
+
+@MainActor
+@Test func cliMissingHintIsNotRenderedInTheProfilesTabWhenTheCliIsPresent() async throws {
+    let backend = FakeBackend()
+    backend.set(cliInstalled: true)
+    let model = AppModel(backend: backend)
+    await model.load()
+    #expect(model.cliMissing == false)
+
+    let tab = ProfilesTab(model: model)
+    #expect(throws: (any Error).self) {
+        try tab.inspect().find(text: "The ccm CLI isn't on PATH — opening sessions won't work.")
+    }
+}
+
 @MainActor
 @Test func addSubscriptionSheetTrimsTheNameBeforeSubmitting() async throws {
     // Task 3 review, Minor finding: the disabled-check trimmed the name but
