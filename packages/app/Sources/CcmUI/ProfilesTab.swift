@@ -24,7 +24,16 @@ public struct ProfilesTab: View {
             if let actionError = model.actionError {
                 ActionErrorBanner(message: actionError) { model.dismissActionError() }
             }
-            if model.rows.isEmpty {
+            if let loadError = model.loadError {
+                // Must come before the `rows.isEmpty` check below: a
+                // config-read failure also leaves `rows` empty (see
+                // `AppModel.load()`), and without this branch first the tab
+                // would fall through to "No profiles yet" — telling the
+                // user to add a profile that may already exist and simply
+                // failed to read (Task 4 review, Important finding).
+                LoadErrorView(model: model, error: loadError)
+                    .frame(maxHeight: 220)
+            } else if model.rows.isEmpty {
                 ContentUnavailableView(
                     "No profiles yet",
                     systemImage: "person.2",

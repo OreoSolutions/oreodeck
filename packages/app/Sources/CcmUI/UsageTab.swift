@@ -76,7 +76,16 @@ public struct UsageTab: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                if model.rows.isEmpty {
+                if let loadError = model.loadError {
+                    // Must come before the `rows.isEmpty` check below: a
+                    // config-read failure also leaves `rows` empty (see
+                    // `AppModel.load()`), and without this branch first the
+                    // tab would fall through to "No profiles yet" — telling
+                    // the user to add a profile that may already exist and
+                    // simply failed to read (Task 4 review, Important
+                    // finding).
+                    LoadErrorView(model: model, error: loadError)
+                } else if model.rows.isEmpty {
                     ContentUnavailableView(
                         "No profiles yet",
                         systemImage: "chart.bar",

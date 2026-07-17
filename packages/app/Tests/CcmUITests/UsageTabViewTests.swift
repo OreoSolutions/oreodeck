@@ -44,6 +44,45 @@ import ViewInspector
     #expect(try tab.inspect().find(text: "Output 65").string() == "Output 65")
 }
 
+// Pins the Task 4 review's Important finding: a config-read failure
+// (`loadError` set) was falling through to the generic "No profiles yet"
+// empty state, which misleadingly tells the user to add a profile that may
+// already exist and simply failed to read. Verified by hand: temporarily
+// changing `if let loadError = model.loadError { LoadErrorView(...) }` in
+// `UsageTab.body` to `if false, let loadError = ...` makes
+// `aLoadErrorRendersDistinctlyAndNotTheEmptyStateInTheUsageTab` fail with
+// ViewInspector's real "Search did not find a match".
+
+@MainActor
+@Test func aLoadErrorRendersDistinctlyAndNotTheEmptyStateInTheUsageTab() async throws {
+    let backend = FakeBackend()
+    backend.set(listError: .ConfigCorrupt)
+    let model = AppModel(backend: backend)
+    await model.load()
+    #expect(model.loadError == .ConfigCorrupt)
+    #expect(model.rows.isEmpty)
+
+    let tab = UsageTab(model: model)
+    let error = try tab.inspect().find(text: "ccm can't read its config")
+    #expect(try error.string() == "ccm can't read its config")
+    #expect(throws: (any Error).self) {
+        try tab.inspect().find(text: "No profiles yet")
+    }
+}
+
+@MainActor
+@Test func aGenuinelyEmptySuccessfulLoadStillShowsTheEmptyStateInTheUsageTab() async throws {
+    let backend = FakeBackend()
+    let model = AppModel(backend: backend)
+    await model.load()
+    #expect(model.loadError == nil)
+    #expect(model.rows.isEmpty)
+
+    let tab = UsageTab(model: model)
+    let empty = try tab.inspect().find(text: "No profiles yet")
+    #expect(try empty.string() == "No profiles yet")
+}
+
 @MainActor
 @Test func aZeroUsageSubscriptionRowRendersDashesNotCrashesOrNaN() async throws {
     // Pins the "zero-usage profile must render sanely" requirement: a fresh

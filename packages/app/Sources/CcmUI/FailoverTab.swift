@@ -31,7 +31,16 @@ public struct FailoverTab: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            if model.failover.order.isEmpty {
+            if let loadError = model.loadError {
+                // Must come before the `order.isEmpty` check below: a
+                // config-read failure also leaves `failover.order` at
+                // whatever it last was (possibly empty, e.g. on first
+                // load), and without this branch first the tab would fall
+                // through to "No profiles yet" — telling the user to add a
+                // profile that may already exist and simply failed to read
+                // (Task 4 review, Important finding).
+                LoadErrorView(model: model, error: loadError)
+            } else if model.failover.order.isEmpty {
                 ContentUnavailableView(
                     "No profiles yet",
                     systemImage: "arrow.triangle.branch",
