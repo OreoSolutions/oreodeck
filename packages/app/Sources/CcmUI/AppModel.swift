@@ -194,4 +194,35 @@ public final class AppModel: ObservableObject {
         let backend = self.backend
         await perform { try backend.removeProfile(name: name) }
     }
+
+    /// Deviation from the Task 4 brief: the brief's snippet declares this
+    /// (and `moveFailover` below) synchronous. Same rationale as the Task 3
+    /// deviation noted in `AppModelTests.swift` — that predates the Task 2
+    /// Critical fix (a659d42) that made every backend-touching method on this
+    /// class `async` and route through `perform`'s `Task.detached` hop.
+    /// Staying synchronous here would mean either blocking the main actor on
+    /// the FFI call or firing a bare `Task {}` straight at the backend, both
+    /// of which the established pattern (and its doc comment above) rules
+    /// out. `FailoverTab`'s `Toggle`/`List.onMove` closures are themselves
+    /// synchronous, so the view wraps these calls in `Task { await ... }`,
+    /// same as every button in `ProfilesTab`.
+    public func setFailoverEnabled(_ on: Bool) async {
+        let backend = self.backend
+        await perform { try backend.setFailoverEnabled(on: on) }
+    }
+
+    /// `.onMove` hands us offsets; the core takes the whole ordered list (and
+    /// restores canonical casing + appends any profile the list forgot), so we
+    /// apply the move locally and send the result wholesale — never a diff.
+    /// On rejection `perform` never mutates `failover` (it only reloads after
+    /// a *successful* write), so a failed write or a failed post-write reload
+    /// both leave `failover.order` exactly where it was: reverted to backend
+    /// truth, with the failure surfaced via `actionError`/`loadError`.
+    public func moveFailover(fromOffsets: IndexSet, toOffset: Int) async {
+        var mutableOrder = failover.order
+        mutableOrder.move(fromOffsets: fromOffsets, toOffset: toOffset)
+        let order = mutableOrder
+        let backend = self.backend
+        await perform { try backend.setFailoverOrder(names: order) }
+    }
 }

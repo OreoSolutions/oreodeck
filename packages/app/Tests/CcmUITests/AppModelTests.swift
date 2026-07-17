@@ -1,4 +1,5 @@
 import CcmKit
+import Foundation
 import Testing
 
 @testable import CcmUI
@@ -189,4 +190,91 @@ import Testing
 
     #expect(model.actionError == "Failed to delete API key for profile \"work\" from macOS Keychain.")
     #expect(model.rows.map(\.name) == ["work"], "a failed remove must leave the profile recoverable")
+}
+
+// MARK: - Failover tab actions
+//
+// Deviation from the Task 4 brief: the brief's snippet calls
+// `setFailoverEnabled`/`moveFailover` synchronously. Same rationale as the
+// Task 3 deviation noted above — these route through `perform`'s
+// `Task.detached` hop like every other backend-touching method on this
+// class, so the tests are `async` and `await` them.
+
+@MainActor
+@Test func setFailoverEnabledWritesThroughToTheCore() async {
+    let backend = FakeBackend()
+    backend.set(failover: FailoverView(enabled: true, order: ["work", "bot"]))
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    await model.setFailoverEnabled(false)
+
+    #expect(backend.setFailoverEnabledCalls == [false])
+    #expect(model.failover.enabled == false)
+}
+
+@MainActor
+@Test func movingARowSendsTheWholeReorderedListToTheCore() async {
+    // set_failover_order takes the complete list and canonicalises the casing
+    // itself, so the model sends the full order, not a diff.
+    let backend = FakeBackend()
+    backend.set(failover: FailoverView(enabled: true, order: ["work", "bot", "extra"]))
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    await model.moveFailover(fromOffsets: IndexSet(integer: 2), toOffset: 0)
+
+    #expect(backend.setFailoverOrderCalls == [["extra", "work", "bot"]])
+    #expect(model.failover.order == ["extra", "work", "bot"])
+}
+
+@MainActor
+@Test func aFailedReorderSurfacesHumanCopyAndLeavesTheOrderAlone() async {
+    // The write itself succeeds on the fake, but the reload `perform` runs
+    // right after it fails — pins that a failed *reload* (not just a failed
+    // write) also leaves published state untouched rather than half-applying
+    // the reorder.
+    let backend = FakeBackend()
+    backend.set(failover: FailoverView(enabled: true, order: ["work", "bot"]))
+    let model = AppModel(backend: backend)
+    await model.load()
+    backend.set(listError: .ConfigCorrupt)
+
+    await model.moveFailover(fromOffsets: IndexSet(integer: 1), toOffset: 0)
+
+    #expect(model.loadError == .ConfigCorrupt)
+    #expect(model.failover.order == ["work", "bot"], "a failed reload must leave the order alone")
+}
+
+@MainActor
+@Test func aRejectedReorderRevertsAndSurfacesActionError() async {
+    // Here the write itself is rejected by the core — the Tauri version's
+    // Critical finding was that this case was silently swallowed. `perform`
+    // never reloads after a failed write, so `failover.order` is left
+    // exactly where it was (backend truth) and the failure surfaces via
+    // `actionError`.
+    let backend = FakeBackend()
+    backend.set(failover: FailoverView(enabled: true, order: ["work", "bot"]))
+    backend.setFailoverOrderError = .Io(message: "disk full")
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    await model.moveFailover(fromOffsets: IndexSet(integer: 1), toOffset: 0)
+
+    #expect(model.actionError == "disk full")
+    #expect(model.failover.order == ["work", "bot"])
+}
+
+@MainActor
+@Test func aRejectedToggleRevertsAndSurfacesActionError() async {
+    let backend = FakeBackend()
+    backend.set(failover: FailoverView(enabled: true, order: ["work"]))
+    backend.setFailoverEnabledError = .Io(message: "disk full")
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    await model.setFailoverEnabled(false)
+
+    #expect(model.actionError == "disk full")
+    #expect(model.failover.enabled == true)
 }

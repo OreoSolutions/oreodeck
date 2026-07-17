@@ -107,7 +107,12 @@ public struct ProfilesTab: View {
 /// poll timeout land here too, since that sheet always dismisses immediately
 /// (see `AddSubscriptionSheet` below) and has nothing else on screen to show
 /// the error once it's gone.
-private struct ActionErrorBanner: View {
+///
+/// Not `private`: `FailoverTab` (Task 4) reuses it verbatim for the same
+/// reason — the toggle/reorder actions go through the same `actionError`
+/// published property via `perform`, and Task 3's Critical finding was
+/// exactly a failure path that set the error but never rendered it.
+struct ActionErrorBanner: View {
     let message: String
     let dismiss: () -> Void
 

@@ -27,6 +27,8 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     var removeError: CcmError?
     var setActiveError: CcmError?
     var openSessionError: CcmError?
+    var setFailoverEnabledError: CcmError?
+    var setFailoverOrderError: CcmError?
 
     func set(profiles: [ProfileView], usage: [ProfileUsageView] = []) {
         lock.withLock {
@@ -86,14 +88,16 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
         }
     }
     func setFailoverEnabled(on: Bool) throws {
-        lock.withLock {
+        try lock.withLock {
             setFailoverEnabledCalls.append(on)
+            if let setFailoverEnabledError { throw setFailoverEnabledError }
             _failover = FailoverView(enabled: on, order: _failover.order)
         }
     }
     func setFailoverOrder(names: [String]) throws {
-        lock.withLock {
+        try lock.withLock {
             setFailoverOrderCalls.append(names)
+            if let setFailoverOrderError { throw setFailoverOrderError }
             _failover = FailoverView(enabled: _failover.enabled, order: names)
         }
     }
