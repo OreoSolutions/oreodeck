@@ -212,6 +212,20 @@ pub async fn open_config_in_editor() -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+pub fn show_dashboard(app: tauri::AppHandle) {
+    use tauri::Manager;
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+#[tauri::command]
+pub fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

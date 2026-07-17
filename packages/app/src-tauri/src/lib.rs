@@ -24,6 +24,8 @@ pub fn run() {
             commands::open_login_terminal,
             commands::check_cli,
             commands::open_config_in_editor,
+            commands::show_dashboard,
+            commands::quit_app,
         ])
         .setup(|app| {
             // Menu-bar app: no Dock icon, no App Switcher entry.
