@@ -1,6 +1,6 @@
 use crate::{keychain, store, terminal, usage};
 
-/// Typed error surface for Swift. Replaces the Tauri version's stringly
+/// Typed error surface for Swift. Replaces the old webview app's stringly
 /// `Result<_, String>` (whose `"CONFIG_CORRUPT"` sentinel leaked raw to
 /// users). Swift `switch`es on these variants — it must never compare
 /// strings. Invariant: no variant ever carries key material; `Keychain`
@@ -502,7 +502,7 @@ mod tests {
             std::fs::write(store::config_path(), b"{ not json").unwrap();
             let err = list_profiles().unwrap_err();
             assert!(matches!(err, CcmError::ConfigCorrupt));
-            // Regression guard for the Tauri version's real bug: the raw
+            // Regression guard for the old webview app's real bug: the raw
             // sentinel leaked to users as the error text.
             assert!(!err.to_string().contains("CONFIG_CORRUPT"));
         });

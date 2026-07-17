@@ -29,7 +29,7 @@ import Testing
 }
 
 @Test func everyCcmErrorRendersAsHumanCopyWithNoMachineSentinel() {
-    // The Tauri version showed users the raw string "CONFIG_CORRUPT". This
+    // The old webview app showed users the raw string "CONFIG_CORRUPT". This
     // test is the guard: every variant must produce a sentence, and the copy
     // must never contain a machine token.
     let all: [CcmError] = [

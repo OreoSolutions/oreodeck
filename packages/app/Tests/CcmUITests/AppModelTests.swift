@@ -116,7 +116,7 @@ import Testing
 
 @MainActor
 @Test func addSubscriptionOpensTerminalThenPollsUntilTheProfileAppears() async {
-    // This is the flow the Tauri version shipped DEAD. It gets an automated
+    // This is the flow the old webview app shipped DEAD. It gets an automated
     // test AND a manual smoke item — one is not a substitute for the other.
     //
     // Deterministic on purpose (Task 3 review, Important finding): the
@@ -248,7 +248,7 @@ import Testing
 
 @MainActor
 @Test func aRejectedReorderRevertsAndSurfacesActionError() async {
-    // Here the write itself is rejected by the core — the Tauri version's
+    // Here the write itself is rejected by the core — the old webview app's
     // Critical finding was that this case was silently swallowed. `perform`
     // never reloads after a failed write, so `failover.order` is left
     // exactly where it was (backend truth) and the failure surfaces via
@@ -277,4 +277,59 @@ import Testing
 
     #expect(model.actionError == "disk full")
     #expect(model.failover.enabled == true)
+}
+
+// MARK: - Task 5: error-state regressions
+//
+// These pin behavior `AppModel` already had going into Task 5 (Task 2's
+// `cliMissing`/`loadError` split, Task 3's `openConfigInEditor`, Task 3's
+// `actionError`/`dismissActionError`) — they are regression guards for the
+// view work in this task, not tests that drove new model code. All three
+// calls are `await`ed: predates the Task 2 Critical fix (a659d42) that made
+// every backend-touching `AppModel` method `async`, same deviation already
+// noted throughout this file.
+
+@MainActor
+@Test func aMissingCliIsANonBlockingFlagNotALoadFailure() async {
+    // Spec §3: no ccm on PATH ⇒ a banner, while everything that doesn't need
+    // the CLI keeps working. It must never masquerade as a load error.
+    let backend = FakeBackend()
+    backend.set(cliInstalled: false)
+    backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)])
+    let model = AppModel(backend: backend)
+
+    await model.load()
+
+    #expect(model.cliMissing)
+    #expect(model.loadError == nil)
+    #expect(model.rows.map(\.name) == ["work"])
+}
+
+@MainActor
+@Test func openConfigInEditorIsTheEscapeHatchFromACorruptConfig() async {
+    let backend = FakeBackend()
+    backend.set(listError: .ConfigCorrupt)
+    let model = AppModel(backend: backend)
+    await model.load()
+    #expect(model.loadError == .ConfigCorrupt)
+
+    await model.openConfigInEditor()
+
+    #expect(backend.openConfigCallCount == 1)
+}
+
+@MainActor
+@Test func anActionErrorIsDismissibleAndNeverWedgesTheApp() async {
+    let backend = FakeBackend()
+    backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)])
+    backend.setActiveError = .NotFound(name: "work")
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    await model.setActive(name: "work")
+    #expect(model.actionError?.contains("work") == true)
+    #expect(model.loadError == nil, "a failed action must not be mistaken for a broken config")
+
+    model.dismissActionError()
+    #expect(model.actionError == nil)
 }

@@ -13,7 +13,7 @@ import SwiftUI
 /// process spawns, or config writes. Every call that reaches the backend is
 /// therefore made from a `Task.detached` hop, never directly on this actor —
 /// only the published-state assignment after `await` runs here. This mirrors
-/// what the Tauri version had to do for its 6 blocking commands.
+/// what the old webview app had to do for its 6 blocking commands.
 @MainActor
 public final class AppModel: ObservableObject {
     /// A surface that, while on screen, wants the 30s refresh running.
@@ -145,7 +145,7 @@ public final class AppModel: ObservableObject {
     /// `pollInterval`/`timeout` are parameters rather than an injected Clock:
     /// tests pass milliseconds and stay fast, at the cost of not being able to
     /// assert the exact production cadence. Worth it — the flow being alive at
-    /// all is what matters, and that is what the Tauri version got wrong.
+    /// all is what matters, and that is what the old webview app got wrong.
     ///
     /// Both the terminal launch and each poll's read go through the same
     /// off-actor hop as every other backend call on this class (`load()` /

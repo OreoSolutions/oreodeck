@@ -45,8 +45,14 @@ public struct MenuBarView: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if model.loadError != nil {
-                Text("ccm can't read its config.")
+            if let loadError = model.loadError {
+                // `message(for:)` — the same typed switch `LoadErrorView`
+                // (dashboard tabs) uses — not the popover's own copy: Task 4's
+                // review flagged a blanket "ccm can't read its config." here
+                // regardless of error, diverging from the tabs'
+                // ConfigCorrupt-vs-other distinction. Reusing the shared
+                // function keeps the two surfaces from drifting again.
+                Text(message(for: loadError))
                     .font(.callout)
                 Button("Open dashboard") { openDashboard() }
             } else if model.rows.isEmpty {
@@ -107,7 +113,7 @@ public struct MenuBarView: View {
         // immediate, not a hang). Absent that measurement, `.onDisappear` is
         // NOT trusted alone — the community-documented failure mode is
         // exactly a gate that silently never stops (spec §3, and the bug this
-        // project already paid for once in Tauri). `didResignKeyNotification`
+        // project already paid for once in the old webview app). `didResignKeyNotification`
         // fires when the popover's backing NSWindow stops being key, which is
         // independent of `onDisappear` and is the documented fallback for
         // this exact gap; it is the mechanism actually relied on here.

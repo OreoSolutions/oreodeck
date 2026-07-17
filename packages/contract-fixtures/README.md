@@ -3,7 +3,7 @@
 Golden fixtures dùng chung bởi hai suite:
 
 - `packages/core` (TypeScript) — `packages/core/src/contract-fixtures.test.ts`
-- `packages/app/src-tauri` (Rust) — `usage.rs` test
+- `packages/core-rs` (Rust) — `usage.rs` test
   `read_profile_usage_matches_golden_contract_fixture`
 
 Sửa `transcript.jsonl` hoặc bảng giá/multiplier ở **một** bên mà quên cập nhật
@@ -20,7 +20,7 @@ Cặp fixture thứ hai, chống lệch cho `config.json` — không chỉ usage
   `contract-fixtures.test.ts` test `"config.json fixture round-trips with
   canonical casing and known fields preserved"` và `"config-corrupt.json
   fixture is rejected, not silently swallowed"`.
-- `packages/app/src-tauri` (Rust) — `store.rs` tests
+- `packages/core-rs` (Rust) — `store.rs` tests
   `config_contract_fixture_round_trips_with_canonical_casing_and_unknown_field_preserved`
   và `config_corrupt_contract_fixture_yields_config_corrupt`.
 

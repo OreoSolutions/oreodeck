@@ -10,10 +10,11 @@ import SwiftUI
 /// read, and telling the user to go add one they already have is actively
 /// misleading.
 ///
-/// Mirrors `MenuBarView`'s already-correct "ccm can't read its config."
-/// copy so the popover and the three tabs agree, and for `.ConfigCorrupt`
-/// specifically offers the "Open config file" escape hatch the design always
-/// intended (`docs/superpowers/plans/2026-07-17-ccm-swift-app.md`'s
+/// `MenuBarView` (Task 5) now renders `message(for:)` directly rather than a
+/// separate blanket string, so the popover and the three tabs share the same
+/// underlying copy instead of merely mirroring it. For `.ConfigCorrupt`
+/// specifically this view offers the "Open config file" escape hatch the
+/// design always intended (`docs/superpowers/plans/2026-07-17-ccm-swift-app.md`'s
 /// `ConfigCorruptView`, never wired into a real view before this fix).
 /// `switch`es on the typed `CcmError` — same invariant as `message(for:)` in
 /// `Formatters.swift` — never a string compare.

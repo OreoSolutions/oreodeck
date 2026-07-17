@@ -147,7 +147,7 @@ struct ActionErrorBanner: View {
     }
 }
 
-/// Opens `ccm add <name>` in Terminal, then polls. The Tauri version used
+/// Opens `ccm add <name>` in Terminal, then polls. The old webview app used
 /// `window.prompt` here — which does nothing at all in a packaged webview, so
 /// the feature was dead on arrival. A real SwiftUI form cannot fail that way.
 ///

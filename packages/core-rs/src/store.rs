@@ -71,7 +71,7 @@ pub enum StoreError {
 impl StoreError {
     /// Chuỗi sạch cho tầng UI — không path, không key, không raw OS error.
     /// KHÔNG có sentinel máy-đọc nào ở đây: `CorruptConfig` từng trả chuỗi
-    /// "CONFIG_CORRUPT" cho bản Tauri, và chuỗi đó rò thẳng ra màn hình
+    /// "CONFIG_CORRUPT" cho bản webview cũ, và chuỗi đó rò thẳng ra màn hình
     /// người dùng. Nay việc phân loại lỗi là của `api::CcmError` (enum có
     /// kiểu, Swift switch trên variant), còn hàm này chỉ sinh câu chữ.
     pub fn message(&self) -> String {

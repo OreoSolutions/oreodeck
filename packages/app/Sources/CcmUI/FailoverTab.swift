@@ -14,7 +14,7 @@ public struct FailoverTab: View {
             // Critical finding): `setFailoverEnabled`/`moveFailover` route
             // through `perform`, which sets `actionError` on a rejected
             // toggle or reorder — a value nothing renders is a silent
-            // failure, exactly what the Tauri version shipped here.
+            // failure, exactly what the old webview app shipped here.
             if let actionError = model.actionError {
                 ActionErrorBanner(message: actionError) { model.dismissActionError() }
             }

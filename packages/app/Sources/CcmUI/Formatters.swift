@@ -29,7 +29,7 @@ public func formatCountdown(resetAtMs: Int64?, nowMs: Int64) -> String {
 
 /// Turns a typed error into copy a human can read. This is a `switch` on the
 /// enum — the ONLY sanctioned way to branch on a CcmError. Never compare the
-/// error's text; the Tauri version did (a `"CONFIG_CORRUPT"` sentinel) and the
+/// error's text; the old webview app did (a `"CONFIG_CORRUPT"` sentinel) and the
 /// sentinel ended up on the user's screen.
 public func message(for error: CcmError) -> String {
     switch error {
