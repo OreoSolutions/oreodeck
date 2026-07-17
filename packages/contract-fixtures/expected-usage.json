@@ -1,0 +1,16 @@
+{
+  "nowMs": 1784203200000,
+  "windowMs": 18000000,
+  "windowStartMs": 1784185200000,
+  "usage": {
+    "entries": 5,
+    "inputTokens": 3700,
+    "cacheWrite5mTokens": 10000,
+    "cacheWrite1hTokens": 4000,
+    "cacheReadTokens": 5000,
+    "outputTokens": 2000,
+    "totalTokens": 24700,
+    "costUsd": 0.09195,
+    "resetAtMs": 1784214005000
+  }
+}

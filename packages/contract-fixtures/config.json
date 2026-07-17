@@ -1,0 +1,9 @@
+{
+  "profiles": [
+    { "name": "Work", "kind": "subscription" },
+    { "name": "bot", "kind": "api-key" }
+  ],
+  "active": "Work",
+  "failoverEnabled": true,
+  "failoverOrder": ["Work", "bot"]
+}
