@@ -62,7 +62,6 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-#[tauri::command]
 pub fn list_profiles() -> Result<Vec<ProfileView>, String> {
     let c = store::load_config().map_err(|e| e.message())?;
     let active = c.active.clone();
@@ -76,12 +75,10 @@ pub fn list_profiles() -> Result<Vec<ProfileView>, String> {
         .collect())
 }
 
-/// `async`: walks every profile's transcript directory (`usage::read_profile_usage`),
-/// which can be slow with a large usage history. Marking this `async fn` moves
-/// it off the main/webview thread onto Tauri's async runtime, per Tauri v2's
-/// documented command threading model.
-#[tauri::command]
-pub async fn get_usage() -> Result<Vec<ProfileUsageView>, String> {
+/// Walks every profile's transcript directory (`usage::read_profile_usage`),
+/// which can be slow with a large usage history. Callers on a UI thread must
+/// hop off it themselves.
+pub fn get_usage() -> Result<Vec<ProfileUsageView>, String> {
     let c = store::load_config().map_err(|e| e.message())?;
     let now = now_ms();
     let active = c.active.clone();
@@ -106,7 +103,6 @@ pub async fn get_usage() -> Result<Vec<ProfileUsageView>, String> {
         .collect())
 }
 
-#[tauri::command]
 pub fn set_active(name: String) -> Result<(), String> {
     store::set_active(&name).map_err(|e| e.message())
 }
@@ -129,10 +125,9 @@ where
     Ok(())
 }
 
-/// `async`: performs Keychain IO (and, on failure, a store rollback), so it
-/// runs on Tauri's async runtime rather than the main thread.
-#[tauri::command]
-pub async fn add_api_key_profile(name: String, key: String) -> Result<(), String> {
+/// Performs Keychain IO (and, on failure, a store rollback). Callers on a UI
+/// thread must hop off it themselves.
+pub fn add_api_key_profile(name: String, key: String) -> Result<(), String> {
     add_api_key_profile_with(&name, &key, |n, k| {
         keychain::set_api_key(n, k).map_err(|e| e.message().to_string())
     })
@@ -163,16 +158,14 @@ where
     store::remove_profile(&profile.name).map_err(|e| e.message())
 }
 
-/// `async`: performs Keychain IO before the store write, so it runs on
-/// Tauri's async runtime rather than the main thread.
-#[tauri::command]
-pub async fn remove_profile(name: String) -> Result<(), String> {
+/// Performs Keychain IO before the store write. Callers on a UI thread must
+/// hop off it themselves.
+pub fn remove_profile(name: String) -> Result<(), String> {
     remove_profile_with(&name, |canonical| {
         keychain::delete_api_key(canonical).map_err(|e| e.message().to_string())
     })
 }
 
-#[tauri::command]
 pub fn get_failover() -> Result<FailoverView, String> {
     let c = store::load_config().map_err(|e| e.message())?;
     Ok(FailoverView {
@@ -181,61 +174,40 @@ pub fn get_failover() -> Result<FailoverView, String> {
     })
 }
 
-#[tauri::command]
 pub fn set_failover_enabled(enabled: bool) -> Result<(), String> {
     store::set_failover_enabled(enabled).map_err(|e| e.message())
 }
 
-#[tauri::command]
 pub fn set_failover_order(order: Vec<String>) -> Result<(), String> {
     store::set_failover_order(&order).map_err(|e| e.message())
 }
 
-/// `async`: blocks on `Command::status()` to launch Terminal.app via
-/// `osascript`, so it runs on Tauri's async runtime rather than the main
-/// thread.
-#[tauri::command]
-pub async fn open_session(name: String) -> Result<(), String> {
+/// Blocks on `Command::status()` to launch Terminal.app via `osascript`.
+/// Callers on a UI thread must hop off it themselves.
+pub fn open_session(name: String) -> Result<(), String> {
     terminal::open_session(&name).map_err(|e| e.message().to_string())
 }
 
-/// `async`: see `open_session` — same `osascript` spawn/block.
-#[tauri::command]
-pub async fn open_login_terminal(name: String) -> Result<(), String> {
+/// See `open_session` — same `osascript` spawn/block.
+pub fn open_login_terminal(name: String) -> Result<(), String> {
     terminal::open_login_terminal(&name).map_err(|e| e.message().to_string())
 }
 
-#[tauri::command]
 pub fn check_cli() -> CliStatus {
     CliStatus {
         installed: terminal::check_cli(),
     }
 }
 
-/// `async`: blocks on `Command::status()` to launch the `open` process, so
-/// it runs on Tauri's async runtime rather than the main thread.
-#[tauri::command]
-pub async fn open_config_in_editor() -> Result<(), String> {
+/// Blocks on `Command::status()` to launch the `open` process. Callers on a
+/// UI thread must hop off it themselves.
+pub fn open_config_in_editor() -> Result<(), String> {
     std::process::Command::new("open")
         .arg("-t")
         .arg(store::config_path())
         .status()
         .map_err(|_| "Could not open the config file.".to_string())?;
     Ok(())
-}
-
-#[tauri::command]
-pub fn show_dashboard(app: tauri::AppHandle) {
-    use tauri::Manager;
-    if let Some(w) = app.get_webview_window("main") {
-        let _ = w.show();
-        let _ = w.set_focus();
-    }
-}
-
-#[tauri::command]
-pub fn quit_app(app: tauri::AppHandle) {
-    app.exit(0);
 }
 
 #[cfg(test)]

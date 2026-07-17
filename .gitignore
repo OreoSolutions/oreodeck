@@ -4,5 +4,9 @@ dist/
 *.log
 .DS_Store
 target/
-packages/app/dist/
-packages/app/src-tauri/gen/
+# uniffi bindgen output — sinh lại bằng packages/app/scripts/generate.sh
+packages/core-rs/Generated/
+packages/app/Sources/CcmKit/ccm_core.swift
+packages/app/Sources/CcmCoreFFI/include/
+packages/app/.build/
+packages/app/ccm.app/

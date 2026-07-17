@@ -299,8 +299,8 @@ mod tests {
     #[serial]
     fn read_profile_usage_matches_golden_contract_fixture() {
         // Golden test dùng chung packages/contract-fixtures/.
+        // CARGO_MANIFEST_DIR = packages/core-rs ⇒ `..` = packages/.
         let fixtures = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
             .join("..")
             .join("contract-fixtures");
         let expected: serde_json::Value = serde_json::from_str(

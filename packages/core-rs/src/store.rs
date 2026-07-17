@@ -375,9 +375,12 @@ mod tests {
         assert_eq!(v["active"], serde_json::json!("work"));
     }
 
+    /// CARGO_MANIFEST_DIR = packages/core-rs ⇒ `..` = packages/ ⇒
+    /// packages/contract-fixtures. This is the anchor against TS/Rust
+    /// contract drift; a wrong path fails the test loudly instead of
+    /// silently skipping it.
     fn contract_fixtures_dir() -> std::path::PathBuf {
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("..")
             .join("..")
             .join("contract-fixtures")
     }
