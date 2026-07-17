@@ -398,4 +398,75 @@ mod tests {
         env::remove_var("CCM_HOME");
         assert!(matches!(err, StoreError::NotFound(_)));
     }
+
+    /// Regression for a real Phase-1 traversal bug: `remove_profile` must
+    /// re-validate the *stored* name (`assert_valid_name`) before touching
+    /// the filesystem, so a hand-tampered config.json with a `../`-style
+    /// name can never reach `fs::remove_dir_all`.
+    #[test]
+    #[serial]
+    fn remove_profile_rejects_tampered_name_before_destroying() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+
+        std::fs::create_dir_all(profiles_dir()).unwrap();
+        // Sibling directory that a naive traversal-unaware implementation
+        // would still be able to delete via `fs::remove_dir_all`.
+        let canary = profiles_dir().join("canary");
+        std::fs::create_dir_all(&canary).unwrap();
+
+        let tampered = b"{\"profiles\":[{\"name\":\"../../escape\",\"kind\":\"subscription\"}],\"active\":null,\"failoverEnabled\":true,\"failoverOrder\":[]}\n";
+        std::fs::write(config_path(), tampered).unwrap();
+
+        let err = remove_profile("../../escape").unwrap_err();
+        let raw_after = std::fs::read(config_path()).unwrap();
+        env::remove_var("CCM_HOME");
+
+        assert!(matches!(err, StoreError::InvalidName(_)));
+        assert!(
+            canary.exists(),
+            "unrelated directory must survive a rejected traversal attempt"
+        );
+        assert_eq!(
+            raw_after, tampered,
+            "config.json must be untouched when remove is rejected"
+        );
+    }
+
+    /// Regression for a real Phase-1 fail-closed bug: if the destructive
+    /// filesystem step errors, `remove_profile` must never reach
+    /// `save_config`, so the profile stays listed and recoverable.
+    #[test]
+    #[serial]
+    fn remove_profile_fail_closed_on_partial_failure() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        add_profile("work", ProfileKind::Subscription).unwrap();
+
+        // Deny write on profiles_dir() itself so `fs::remove_dir_all` on the
+        // "work" entry inside it fails with a permission error, without
+        // requiring escalated privileges.
+        let parent = profiles_dir();
+        let original_perms = std::fs::metadata(&parent).unwrap().permissions();
+        let mut readonly_perms = original_perms.clone();
+        readonly_perms.set_mode(0o555);
+        std::fs::set_permissions(&parent, readonly_perms).unwrap();
+
+        let result = remove_profile("work");
+
+        // Restore permissions before any assertion can bail out, so the
+        // tempdir can still be cleaned up on drop.
+        std::fs::set_permissions(&parent, original_perms).unwrap();
+
+        let err = result.unwrap_err();
+        let c = load_config().unwrap();
+        env::remove_var("CCM_HOME");
+
+        assert!(matches!(err, StoreError::Io(_)));
+        assert_eq!(c.profiles.len(), 1);
+        assert_eq!(c.profiles[0].name, "work");
+        assert!(profile_dir("work").unwrap().exists());
+    }
 }
