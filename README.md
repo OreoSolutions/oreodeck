@@ -38,31 +38,48 @@ Thiết kế: `docs/superpowers/specs/2026-07-16-ccm-multi-account-claude-design
 
 ## App (menu-bar + dashboard)
 
-`packages/app` là một app Tauri: icon trên menu bar (popover xem usage nhanh,
-đổi active, mở phiên) cộng dashboard (tab Profiles/Usage/Failover) — quản lý
-cùng các profile mà CLI quản lý, đọc/ghi chung `~/.ccm/config.json`. Cần `ccm`
-có sẵn trên PATH để mở phiên (Open session) và đăng nhập subscription (Add
-subscription profile mở Terminal chạy `ccm add <name>`).
+`packages/app` là một app **SwiftUI native**: icon trên menu bar (popover xem
+usage nhanh, mở phiên) cộng dashboard (tab Profiles / Usage / Failover). Nó
+quản lý đúng những profile mà CLI quản lý — đọc/ghi chung `~/.ccm/config.json`,
+chung Keychain service `com.oreo.ccm`. Cần `ccm` trên PATH để mở phiên (Open
+session) và đăng nhập subscription (Add subscription mở Terminal chạy
+`ccm add <name>` rồi tự chờ profile hiện ra).
+
+Logic core viết bằng Rust (`packages/core-rs`) và dùng lại nguyên vẹn từ bản
+app trước; SwiftUI gọi sang qua **uniffi 0.32** với binding sinh tự động, nên
+kiểu ở hai bên không thể lệch nhau.
 
 Build:
 
 ```bash
-cd packages/app
-bun tauri build
+bun run build:app          # cargo build → uniffi-bindgen → swift build → ccm.app
+open packages/app/ccm.app
 ```
 
-DMG nằm ở `packages/app/src-tauri/target/release/bundle/dmg/`.
+Test:
 
-**DMG chưa ký (unsigned):** ký + notarize dời sang giai đoạn sau (xem mục 6
-"Đóng gói" trong thiết kế bên dưới). Bản build ngay trên máy mở thẳng được —
-không dính quarantine. Nhưng nếu tải/copy DMG qua máy khác rồi double-click,
-macOS Gatekeeper sẽ báo "ccm is damaged and can't be opened"; đây không phải
-bug. Cách mở: copy `.app` ra khỏi DMG trước (volume DMG chỉ đọc), rồi chạy:
+```bash
+bun run test               # suite TS (core + cli)
+bun run test:app           # suite Swift (view model)
+cargo test --manifest-path packages/core-rs/Cargo.toml   # suite Rust
+bun run test:contract      # golden fixtures, TS ↔ Rust cùng đọc
+bun run lint && bun run fmt:check
+```
+
+Sau khi đổi `packages/core-rs/src/api.rs`, chạy lại
+`bash packages/app/scripts/generate.sh` để sinh lại binding (binding bị
+gitignore — nó luôn được sinh từ thư viện đã build, không bao giờ sửa tay).
+
+**`.app` chưa ký (unsigned):** ký + notarize vẫn ngoài phạm vi. Bản build ngay
+trên máy mở thẳng được. Nếu copy `.app` qua máy khác rồi double-click, macOS
+Gatekeeper báo "ccm is damaged and can't be opened" — không phải bug. Cách mở:
 
 `xattr -dr com.apple.quarantine /Applications/ccm.app`
 
-Chuột phải → Open không dùng được: bundle chỉ có chữ ký ad-hoc do linker tạo
-(`codesign --verify` fail), mà lối chuột-phải chưa bao giờ áp dụng cho chữ ký
-không hợp lệ — và Apple đã bỏ hẳn lối này từ macOS Sequoia (15).
+Chuột phải → Open **không** dùng được: bundle chỉ có chữ ký ad-hoc do linker
+tạo (`codesign --verify` fail), mà lối chuột-phải chưa bao giờ áp dụng cho chữ
+ký không hợp lệ — và Apple đã bỏ hẳn lối này từ macOS Sequoia (15).
 
-Thiết kế: `docs/superpowers/specs/2026-07-17-ccm-app-phase-2-design.md`
+Thiết kế: `docs/superpowers/specs/2026-07-17-ccm-swift-app-design.md`
+Spike chứng minh chuỗi uniffi → Swift → `.app`:
+`docs/superpowers/spikes/2026-07-17-uniffi-swift.md`
