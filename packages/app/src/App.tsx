@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { checkCli, listProfiles, CONFIG_CORRUPT, openConfigInEditor } from "./lib/api";
 import ProfilesTab from "./components/ProfilesTab";
+import UsageTab from "./components/UsageTab";
+import FailoverTab from "./components/FailoverTab";
 
 type Tab = "profiles" | "usage" | "failover";
 
@@ -55,8 +57,8 @@ export default function App() {
         </button>
       </nav>
       {tab === "profiles" && <ProfilesTab />}
-      {tab === "usage" && <p>Usage tab — Task 6.</p>}
-      {tab === "failover" && <p>Failover tab — Task 6.</p>}
+      {tab === "usage" && <UsageTab />}
+      {tab === "failover" && <FailoverTab />}
     </div>
   );
 }
