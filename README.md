@@ -55,7 +55,11 @@ DMG nằm ở `packages/app/src-tauri/target/release/bundle/dmg/`.
 
 **DMG chưa ký (unsigned):** ký + notarize dời sang giai đoạn sau (xem mục 6
 "Đóng gói" trong thiết kế bên dưới). macOS Gatekeeper sẽ báo "ccm is damaged
-and can't be opened" khi mở lần đầu — chuột phải vào `.app` → Open để xác
-nhận, hoặc `xattr -dr com.apple.quarantine /Applications/ccm.app`.
+and can't be opened" khi mở lần đầu. Cách mở:
+`xattr -dr com.apple.quarantine /Applications/ccm.app`.
+
+Chuột phải → Open không dùng được: bundle chỉ có chữ ký ad-hoc, mà lối đó
+chưa bao giờ áp dụng cho chữ ký không hợp lệ và đã bị Apple bỏ từ macOS
+Sequoia (15).
 
 Thiết kế: `docs/superpowers/specs/2026-07-17-ccm-app-phase-2-design.md`
