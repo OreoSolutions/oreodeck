@@ -40,7 +40,7 @@ export default function App() {
   return (
     <div className="app">
       {!cliInstalled && (
-        <div className="banner warn">
+        <div className="banner warn" role="status">
           The <code>ccm</code> CLI is not on your PATH. Install it to open sessions and add
           subscription logins.
         </div>

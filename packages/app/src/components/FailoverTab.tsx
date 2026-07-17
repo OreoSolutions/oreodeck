@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getFailover, setFailoverEnabled, setFailoverOrder } from "../lib/api";
+import { getFailover, setFailoverEnabled, setFailoverOrder, toUserMessage } from "../lib/api";
 import { moveItem } from "../lib/reorder";
 
 export default function FailoverTab() {
@@ -13,13 +13,13 @@ export default function FailoverTab() {
         setEnabled(f.enabled);
         setOrder(f.order);
       })
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(toUserMessage(e)));
 
   useEffect(() => {
     reload();
   }, []);
 
-  const guard = (p: Promise<unknown>) => p.catch((e) => setError(String(e))).finally(reload);
+  const guard = (p: Promise<unknown>) => p.catch((e) => setError(toUserMessage(e))).finally(reload);
 
   const toggle = () => {
     const next = !enabled;

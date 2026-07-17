@@ -1,49 +1,45 @@
 import { useEffect, useState } from "react";
 import {
   listProfiles,
+  getUsage,
   setActive,
   openSession,
-  openLoginTerminal,
   removeProfile,
+  toUserMessage,
   type ProfileView,
+  type ProfileUsageView,
 } from "../lib/api";
+import { formatCost, formatCountdown } from "../lib/format";
 import RemoveDialog from "./RemoveDialog";
 import AddApiKeyForm from "./AddApiKeyForm";
+import AddSubscriptionForm from "./AddSubscriptionForm";
 
 export default function ProfilesTab() {
   const [profiles, setProfiles] = useState<ProfileView[]>([]);
+  const [usage, setUsage] = useState<ProfileUsageView[]>([]);
+  const [now, setNow] = useState(Date.now());
   const [removing, setRemoving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const reload = () =>
-    listProfiles()
-      .then(setProfiles)
-      .catch((e) => setError(String(e)));
+  const reload = () => {
+    setNow(Date.now());
+    return Promise.all([listProfiles(), getUsage()])
+      .then(([ps, us]) => {
+        setProfiles(ps);
+        setUsage(us);
+      })
+      .catch((e) => setError(toUserMessage(e)));
+  };
 
   useEffect(() => {
     reload();
+    const id = setInterval(reload, 30_000); // refresh every 30s, same cadence as Usage/tray
+    return () => clearInterval(id);
   }, []);
 
-  const guard = (p: Promise<unknown>) => p.catch((e) => setError(String(e))).finally(reload);
+  const guard = (p: Promise<unknown>) => p.catch((e) => setError(toUserMessage(e))).finally(reload);
 
-  const addSubscription = () => {
-    const name = window.prompt("New subscription profile name:");
-    if (!name) return;
-    // Open Terminal for `ccm add`, then poll config until the profile appears.
-    openLoginTerminal(name)
-      .then(() => pollForProfile(name))
-      .catch((e) => setError(String(e)));
-  };
-
-  const pollForProfile = (name: string, tries = 0) => {
-    listProfiles()
-      .then((ps) => {
-        setProfiles(ps);
-        const found = ps.some((p) => p.name.toLowerCase() === name.toLowerCase());
-        if (!found && tries < 30) setTimeout(() => pollForProfile(name, tries + 1), 2000);
-      })
-      .catch(() => {});
-  };
+  const usageFor = (name: string) => usage.find((u) => u.profile === name);
 
   return (
     <section>
@@ -52,39 +48,56 @@ export default function ProfilesTab() {
           {error}
         </p>
       )}
-      <table>
-        <thead>
-          <tr>
-            <th>Profile</th>
-            <th>Kind</th>
-            <th>Active</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {profiles.map((p) => (
-            <tr key={p.name}>
-              <td>{p.name}</td>
-              <td>{p.kind}</td>
-              <td>{p.active ? "●" : ""}</td>
-              <td>
-                <button disabled={p.active} onClick={() => guard(setActive(p.name))}>
-                  Set active
-                </button>
-                <button onClick={() => openSession(p.name).catch((e) => setError(String(e)))}>
-                  Open session
-                </button>
-                {!removing && <button onClick={() => setRemoving(p.name)}>Remove</button>}
-              </td>
+      {profiles.length === 0 ? (
+        <p className="empty">
+          No profiles yet. Create one with <code>ccm add &lt;name&gt;</code>.
+        </p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>Profile</th>
+              <th>Kind</th>
+              <th>Active</th>
+              <th>Token (5h)</th>
+              <th>Cost</th>
+              <th>Reset</th>
+              <th>Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {profiles.map((p) => {
+              const u = usageFor(p.name);
+              return (
+                <tr key={p.name}>
+                  <td>{p.name}</td>
+                  <td>{p.kind}</td>
+                  <td>{p.active ? "●" : ""}</td>
+                  <td>{u ? u.totalTokens.toLocaleString() : "—"}</td>
+                  <td>{u ? formatCost(u) : "—"}</td>
+                  <td>{u ? formatCountdown(u.resetAt, now) : "—"}</td>
+                  <td>
+                    <button disabled={p.active} onClick={() => guard(setActive(p.name))}>
+                      Set active
+                    </button>
+                    <button
+                      onClick={() => openSession(p.name).catch((e) => setError(toUserMessage(e)))}
+                    >
+                      Open session
+                    </button>
+                    {!removing && <button onClick={() => setRemoving(p.name)}>Remove</button>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
 
       <div className="add-actions">
-        <button onClick={addSubscription}>Add subscription profile</button>
+        <AddSubscriptionForm onAdded={reload} />
+        <AddApiKeyForm onAdded={reload} />
       </div>
-      <AddApiKeyForm onAdded={reload} />
 
       {removing && (
         <RemoveDialog

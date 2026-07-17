@@ -30,6 +30,19 @@ export interface FailoverView {
 /** Sentinel Rust trả khi config.json hỏng — App hiện banner thay vì crash. */
 export const CONFIG_CORRUPT = "CONFIG_CORRUPT";
 
+/**
+ * Single boundary that turns a raw thrown value into text safe to show the user.
+ * Every `setError`/alert in the app must route through this — it is what stops the
+ * CONFIG_CORRUPT sentinel (or any other machine-readable rejection) from leaking
+ * verbatim into a `role="alert"` banner.
+ */
+export function toUserMessage(e: unknown): string {
+  if (String(e) === CONFIG_CORRUPT) {
+    return "Your ~/.ccm/config.json is corrupt and could not be read. ccm changed nothing.";
+  }
+  return String(e);
+}
+
 export const listProfiles = () => invoke<ProfileView[]>("list_profiles");
 export const getUsage = () => invoke<ProfileUsageView[]>("get_usage");
 export const setActive = (name: string) => invoke<void>("set_active", { name });

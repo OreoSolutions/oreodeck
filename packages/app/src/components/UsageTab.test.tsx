@@ -82,4 +82,27 @@ describe("UsageTab", () => {
     await act(() => vi.advanceTimersByTimeAsync(60_000));
     expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === "get_usage").length).toBe(2);
   });
+
+  it("shows an empty-state message when there are no profiles", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_usage") return Promise.resolve([]);
+      return Promise.resolve(undefined);
+    });
+    render(<UsageTab />);
+    await screen.findByText(/No profiles yet/);
+  });
+
+  it("shows an error banner with an Open-config action instead of a silent blank page", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_usage") return Promise.reject("CONFIG_CORRUPT");
+      return Promise.resolve(undefined);
+    });
+    render(<UsageTab />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).not.toBe("CONFIG_CORRUPT");
+    expect(alert.textContent).toMatch(/corrupt/i);
+    screen.getByRole("button", { name: "Open config file" }).click();
+    await act(() => Promise.resolve());
+    expect(mockInvoke).toHaveBeenCalledWith("open_config_in_editor");
+  });
 });

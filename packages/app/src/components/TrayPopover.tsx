@@ -59,6 +59,12 @@ export default function TrayPopover() {
 
   return (
     <div className="tray">
+      {rows.length === 0 && (
+        <p className="empty">
+          No profiles yet. Create one with <code>ccm add &lt;name&gt;</code>, or open the
+          dashboard to add one.
+        </p>
+      )}
       {rows.map((r) => (
         <div key={r.profile} className="tray-row">
           <button className="tray-name" onClick={() => setActive(r.profile).catch(() => {})}>

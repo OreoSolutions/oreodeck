@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { addApiKeyProfile } from "../lib/api";
+import { addApiKeyProfile, toUserMessage } from "../lib/api";
 
 export default function AddApiKeyForm({ onAdded }: { onAdded: () => void }) {
   const [name, setName] = useState("");
@@ -16,7 +16,7 @@ export default function AddApiKeyForm({ onAdded }: { onAdded: () => void }) {
       setKey("");
       onAdded();
     } catch (err) {
-      setError(String(err));
+      setError(toUserMessage(err));
     }
   };
 

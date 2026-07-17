@@ -9,6 +9,7 @@ th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #e5e7eb; }
 .banner.warn { background: #fef3c7; }
 .banner.error { background: #fee2e2; }
 .error { color: #b91c1c; }
+.empty { color: #6b7280; font-style: italic; }
 .dialog { position: fixed; inset: 0; margin: auto; height: fit-content; max-width: 360px;
   background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 16px; box-shadow: 0 8px 24px rgba(0,0,0,.2); }
 .bar { display: flex; height: 14px; width: 100%; border-radius: 4px; overflow: hidden; background: #f3f4f6; }

@@ -125,6 +125,16 @@ describe("TrayPopover", () => {
     expect(usageCallCount()).toBe(4); // exactly one interval firing, not stacked
   });
 
+  it("shows an empty-state message when there are no profiles", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_usage") return Promise.resolve([]);
+      return Promise.resolve(undefined);
+    });
+    render(<TrayPopover />);
+    await showPopover();
+    await screen.findByText(/No profiles yet/);
+  });
+
   it("shows a compact error banner and does not crash when get_usage rejects with CONFIG_CORRUPT", async () => {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === "get_usage") return Promise.reject("CONFIG_CORRUPT");
