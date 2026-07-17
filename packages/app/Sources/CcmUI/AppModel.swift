@@ -3,9 +3,17 @@ import Foundation
 import SwiftUI
 
 /// Single source of truth for every surface (menu-bar popover + the three
-/// dashboard tabs). `@MainActor` because it feeds SwiftUI directly; the uniffi
-/// calls are synchronous and actor-agnostic, so they can be made from here
-/// without any wrapper (verified by the spike).
+/// dashboard tabs). `@MainActor` because it feeds SwiftUI directly. The uniffi
+/// calls themselves are synchronous, actor-agnostic Swift functions (verified
+/// by the spike — no wrapper needed for *data-race* safety), but several of
+/// them do real blocking IO on the calling thread: `getUsage` walks every
+/// profile's transcript directory (`core-rs/src/api.rs` documents "callers on
+/// a UI thread must hop off it themselves"), and the action calls
+/// (`setActive`, `openSession`, `openConfigInEditor`, ...) do keychain IO,
+/// process spawns, or config writes. Every call that reaches the backend is
+/// therefore made from a `Task.detached` hop, never directly on this actor —
+/// only the published-state assignment after `await` runs here. This mirrors
+/// what the Tauri version had to do for its 6 blocking commands.
 @MainActor
 public final class AppModel: ObservableObject {
     /// A surface that, while on screen, wants the 30s refresh running.
@@ -42,9 +50,9 @@ public final class AppModel: ObservableObject {
 
     public var isRefreshing: Bool { !visibleSurfaces.isEmpty }
 
-    public func surfaceAppeared(_ surface: Surface) {
+    public func surfaceAppeared(_ surface: Surface) async {
         visibleSurfaces.insert(surface)
-        load()
+        await load()
     }
 
     public func surfaceDisappeared(_ surface: Surface) {
@@ -53,20 +61,30 @@ public final class AppModel: ObservableObject {
 
     /// Called by each surface's 30s timer. Gated: with nothing on screen this
     /// is a no-op, so a closed popover never walks the transcript tree.
-    public func tick() {
+    public func tick() async {
         guard isRefreshing else { return }
-        load()
+        await load()
     }
 
-    public func load() {
+    /// Every backend call here is documented-or-suspected blocking (see the
+    /// class doc), so the whole batch runs inside one `Task.detached` — off
+    /// the main actor — and only the results cross back over `await` to be
+    /// assigned to the `@Published` properties.
+    public func load() async {
         loadCount += 1
         nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        cliMissing = !backend.checkCli()
+        let backend = self.backend
         do {
-            let profiles = try backend.listProfiles()
-            let usage = try backend.getUsage()
-            rows = mergeRows(profiles: profiles, usage: usage)
-            failover = try backend.getFailover()
+            let result = try await Task.detached {
+                let cliInstalled = backend.checkCli()
+                let profiles = try backend.listProfiles()
+                let usage = try backend.getUsage()
+                let failover = try backend.getFailover()
+                return (cliInstalled, profiles, usage, failover)
+            }.value
+            cliMissing = !result.0
+            rows = mergeRows(profiles: result.1, usage: result.2)
+            failover = result.3
             loadError = nil
         } catch let error as CcmError {
             loadError = error
@@ -80,13 +98,16 @@ public final class AppModel: ObservableObject {
         actionError = nil
     }
 
-    /// Runs a user action, reloads on success, and turns any typed failure into
-    /// human copy. Nothing here ever touches key material.
-    func perform(_ action: () throws -> Void) {
+    /// Runs a user action off the main actor, reloads on success, and turns
+    /// any typed failure into human copy. Nothing here ever touches key
+    /// material. `action` must not capture `self` — call sites hoist `backend`
+    /// into a local so the closure stays `Sendable` without making `AppModel`
+    /// itself `Sendable`.
+    func perform(_ action: @escaping @Sendable () throws -> Void) async {
         do {
-            try action()
+            try await Task.detached { try action() }.value
             actionError = nil
-            load()
+            await load()
         } catch let error as CcmError {
             actionError = message(for: error)
         } catch {
@@ -94,15 +115,18 @@ public final class AppModel: ObservableObject {
         }
     }
 
-    public func setActive(name: String) {
-        perform { try backend.setActive(name: name) }
+    public func setActive(name: String) async {
+        let backend = self.backend
+        await perform { try backend.setActive(name: name) }
     }
 
-    public func openSession(name: String) {
-        perform { try backend.openSession(name: name) }
+    public func openSession(name: String) async {
+        let backend = self.backend
+        await perform { try backend.openSession(name: name) }
     }
 
-    public func openConfigInEditor() {
-        perform { try backend.openConfigInEditor() }
+    public func openConfigInEditor() async {
+        let backend = self.backend
+        await perform { try backend.openConfigInEditor() }
     }
 }

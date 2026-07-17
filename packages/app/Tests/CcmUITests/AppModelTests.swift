@@ -4,14 +4,14 @@ import Testing
 @testable import CcmUI
 
 @MainActor
-@Test func loadPopulatesRowsFailoverAndCliStatus() {
+@Test func loadPopulatesRowsFailoverAndCliStatus() async {
     let backend = FakeBackend()
     backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)])
     backend.set(failover: FailoverView(enabled: false, order: ["work"]))
     backend.set(cliInstalled: false)
     let model = AppModel(backend: backend)
 
-    model.load()
+    await model.load()
 
     #expect(model.rows.map(\.name) == ["work"])
     #expect(model.failover.enabled == false)
@@ -20,56 +20,56 @@ import Testing
 }
 
 @MainActor
-@Test func tickDoesNothingWhileNoSurfaceIsOnScreen() {
+@Test func tickDoesNothingWhileNoSurfaceIsOnScreen() async {
     // The 30s refresh must be gated on the popover/tab actually being visible
     // (spec §3) — an invisible menu-bar agent has no business walking every
     // transcript on disk every 30 seconds.
     let backend = FakeBackend()
     let model = AppModel(backend: backend)
 
-    model.tick()
-    model.tick()
+    await model.tick()
+    await model.tick()
 
     #expect(model.loadCount == 0)
     #expect(backend.listCallCount == 0)
 }
 
 @MainActor
-@Test func tickRefreshesOnlyWhileASurfaceIsOnScreen() {
+@Test func tickRefreshesOnlyWhileASurfaceIsOnScreen() async {
     let backend = FakeBackend()
     let model = AppModel(backend: backend)
 
-    model.surfaceAppeared(.popover)   // loads immediately
+    await model.surfaceAppeared(.popover)  // loads immediately
     #expect(model.loadCount == 1)
 
-    model.tick()
+    await model.tick()
     #expect(model.loadCount == 2)
 
     model.surfaceDisappeared(.popover)
-    model.tick()
+    await model.tick()
     #expect(model.loadCount == 2, "refresh must stop the moment the surface goes away")
 }
 
 @MainActor
-@Test func refreshKeepsRunningWhileAnyOtherSurfaceIsStillOnScreen() {
+@Test func refreshKeepsRunningWhileAnyOtherSurfaceIsStillOnScreen() async {
     let backend = FakeBackend()
     let model = AppModel(backend: backend)
 
-    model.surfaceAppeared(.popover)
-    model.surfaceAppeared(.profilesTab)
+    await model.surfaceAppeared(.popover)
+    await model.surfaceAppeared(.profilesTab)
     model.surfaceDisappeared(.popover)
 
-    model.tick()
+    await model.tick()
     #expect(model.loadCount == 3, "the dashboard tab is still visible, so keep refreshing")
 }
 
 @MainActor
-@Test func loadErrorIsKeptAsATypedValue() {
+@Test func loadErrorIsKeptAsATypedValue() async {
     let backend = FakeBackend()
     backend.set(listError: .ConfigCorrupt)
     let model = AppModel(backend: backend)
 
-    model.load()
+    await model.load()
 
     #expect(model.loadError == .ConfigCorrupt)
     #expect(model.rows.isEmpty)
