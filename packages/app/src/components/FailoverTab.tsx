@@ -5,6 +5,7 @@ import { moveItem } from "../lib/reorder";
 export default function FailoverTab() {
   const [enabled, setEnabled] = useState(true);
   const [order, setOrder] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const reload = () =>
     getFailover()
@@ -12,26 +13,33 @@ export default function FailoverTab() {
         setEnabled(f.enabled);
         setOrder(f.order);
       })
-      .catch(() => {});
+      .catch((e) => setError(String(e)));
 
   useEffect(() => {
     reload();
   }, []);
 
-  const toggle = async () => {
+  const guard = (p: Promise<unknown>) => p.catch((e) => setError(String(e))).finally(reload);
+
+  const toggle = () => {
     const next = !enabled;
     setEnabled(next);
-    await setFailoverEnabled(next).catch(() => {});
+    guard(setFailoverEnabled(next));
   };
 
-  const move = async (from: number, to: number) => {
+  const move = (from: number, to: number) => {
     const next = moveItem(order, from, to);
     setOrder(next);
-    await setFailoverOrder(next).catch(() => {});
+    guard(setFailoverOrder(next));
   };
 
   return (
     <section>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
       <label>
         <input
           type="checkbox"

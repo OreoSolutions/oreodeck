@@ -30,4 +30,17 @@ describe("UsageBar", () => {
     );
     expect(container.querySelectorAll(".bar > div").length).toBe(3);
   });
+
+  it("stacks segments in the spec order: input, cache5m, cache1h, cacheRead, output", () => {
+    const { container } = render(<UsageBar usage={usage} />);
+    const segments = container.querySelectorAll(".bar > div");
+    const classes = Array.from(segments).map((el) => el.getAttribute("data-class"));
+    expect(classes).toEqual([
+      "input",
+      "cache write 5m",
+      "cache write 1h",
+      "cache read",
+      "output",
+    ]);
+  });
 });

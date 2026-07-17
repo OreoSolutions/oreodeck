@@ -33,4 +33,27 @@ describe("FailoverTab", () => {
       expect(mockInvoke).toHaveBeenCalledWith("set_failover_order", { order: ["bot", "work"] }),
     );
   });
+
+  it("reverts to the backend order and surfaces an error when set_failover_order is rejected", async () => {
+    mockInvoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_failover")
+        return Promise.resolve({ enabled: true, order: ["work", "bot"] });
+      if (cmd === "set_failover_order") return Promise.reject(new Error("boom"));
+      return Promise.resolve(undefined);
+    });
+    render(<FailoverTab />);
+    await screen.findByText("work");
+    fireEvent.click(screen.getByLabelText("move work down"));
+
+    // Optimistic update briefly reorders...
+    await waitFor(() =>
+      expect(mockInvoke).toHaveBeenCalledWith("set_failover_order", { order: ["bot", "work"] }),
+    );
+    // ...but the rejection triggers a reload that reverts to the backend's canonical order.
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("boom"));
+    const names = screen.getAllByRole("listitem").map((li) => li.textContent?.split(/[↑↓]/)[0]);
+    expect(names).toEqual(["work", "bot"]);
+    // get_failover called once on mount + once on reconciliation after rejection.
+    expect(mockInvoke.mock.calls.filter(([cmd]) => cmd === "get_failover").length).toBe(2);
+  });
 });
