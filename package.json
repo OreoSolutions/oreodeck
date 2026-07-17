@@ -4,8 +4,10 @@
   "type": "module",
   "workspaces": ["packages/*"],
   "scripts": {
-    "test": "bun test",
+    "test": "bun test packages/core packages/cli",
+    "test:contract": "bun test packages/core/src/contract-fixtures.test.ts && cargo test --manifest-path packages/app/src-tauri/Cargo.toml contract",
     "typecheck": "tsc --noEmit",
+    "fmt:check": "cargo fmt --manifest-path packages/app/src-tauri/Cargo.toml --check",
     "build": "bun build packages/cli/src/index.ts --compile --outfile dist/ccm"
   },
   "devDependencies": {
