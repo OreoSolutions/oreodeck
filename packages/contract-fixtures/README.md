@@ -3,13 +3,54 @@
 Golden fixtures dùng chung bởi hai suite:
 
 - `packages/core` (TypeScript) — `packages/core/src/contract-fixtures.test.ts`
-- `packages/app/src-tauri` (Rust) — `usage.rs` test `contract_usage_matches_expected`
+- `packages/app/src-tauri` (Rust) — `usage.rs` test
+  `read_profile_usage_matches_golden_contract_fixture`
 
 Sửa `transcript.jsonl` hoặc bảng giá/multiplier ở **một** bên mà quên cập nhật
 `expected-usage.json` sẽ làm **cả hai** suite đỏ. Đó là chủ đích: đây là chốt
 chống lệch contract TS ↔ Rust.
 
 `nowMs` cố định (2026-07-16T12:00:00.000Z) để cửa sổ 5h là tất định.
+
+## `config.json` / `config-corrupt.json`
+
+Cặp fixture thứ hai, chống lệch cho `config.json` — không chỉ usage. Đọc bởi:
+
+- `packages/core` (TypeScript) —
+  `contract-fixtures.test.ts` test `"config.json fixture round-trips with
+  canonical casing and known fields preserved"` và `"config-corrupt.json
+  fixture is rejected, not silently swallowed"`.
+- `packages/app/src-tauri` (Rust) — `store.rs` tests
+  `config_contract_fixture_round_trips_with_canonical_casing_and_unknown_field_preserved`
+  và `config_corrupt_contract_fixture_yields_config_corrupt`.
+
+`config.json` là một config hợp lệ, mỗi trường pin một hành vi:
+
+- **`profiles`**: hai profile, casing hỗn hợp (`"Work"` viết hoa, `"bot"` viết
+  thường) — pin rằng casing gốc được giữ nguyên qua round-trip (không bị
+  lowercase hoá), và cả hai `kind` (`subscription`, `api-key`) đều parse
+  đúng.
+- **`active`**: `"Work"` (canonical casing, không phải `"work"`) — pin rằng
+  `active` không bị chuẩn hoá case khi đọc/ghi lại.
+- **`failoverEnabled`** / **`failoverOrder`**: pin naming `camelCase` và thứ
+  tự được giữ nguyên.
+- **`telemetryOptIn`**: trường KHÔNG có trong `Config`/`Profile` của
+  `Rust`/`TypeScript` hiện tại — mô phỏng một trường mà một phiên bản CLI
+  tương lai thêm vào. Cả hai suite pin rằng trường lạ này sống sót
+  byte-value-identical qua một lần ghi lại config (`setActive` phía TS,
+  `set_active` phía Rust). Đây chính là assert lẽ ra đã bắt được lỗi Rust
+  từng âm thầm xoá trường lạ khi ghi (`#[serde(flatten)] extra` trên
+  `Config`/`Profile` trong `store.rs`).
+
+`config-corrupt.json` là JSON bị cắt cụt (invalid syntax), không phải một
+config hợp lệ thiếu trường. Pin hành vi **fail-loud** ở cả hai bên khi đọc
+gặp lỗi cú pháp:
+
+- TS: `loadConfig()` reject (`readJson()` chỉ coi `ENOENT` là "file thiếu" →
+  default; mọi lỗi đọc/parse khác, kể cả `SyntaxError` từ `JSON.parse`, được
+  ném lại nguyên văn).
+- Rust: `load_config()` trả `Err(StoreError::CorruptConfig)` (message sentinel
+  `"CONFIG_CORRUPT"` cho UI hiện banner).
 
 ## Schema of `expected-usage.json`
 

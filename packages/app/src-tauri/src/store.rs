@@ -24,6 +24,14 @@ pub enum ProfileKind {
 pub struct Profile {
     pub name: String,
     pub kind: ProfileKind,
+    /// Trường lạ (chưa biết ở phiên bản Rust này) — giữ nguyên qua round-trip
+    /// thay vì bị xóa khi app ghi lại config.json, khớp tính lossless của TS
+    /// (`readJson` → mutate → `JSON.stringify`, không đi qua struct cố định
+    /// field nào). Không tương thích với `deny_unknown_fields` — ta cố ý
+    /// không dùng nó, vì bỏ qua trường lạ khi ĐỌC đã là hành vi forward-
+    /// compat đúng theo mặc định của serde.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -33,6 +41,10 @@ pub struct Config {
     pub active: Option<String>,
     pub failover_enabled: bool,
     pub failover_order: Vec<String>,
+    /// Xem ghi chú `extra` trên `Profile` — cùng lý do, ở cấp top-level của
+    /// config.json.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for Config {
@@ -42,6 +54,7 @@ impl Default for Config {
             active: None,
             failover_enabled: true,
             failover_order: Vec::new(),
+            extra: serde_json::Map::new(),
         }
     }
 }
@@ -60,9 +73,9 @@ impl StoreError {
     /// `CorruptConfig` trả sentinel để UI hiện banner "config hỏng".
     pub fn message(&self) -> String {
         match self {
-            StoreError::InvalidName(n) => format!(
-                "Invalid profile name: {n:?}. Use letters, digits, - and _ (max 64 chars)."
-            ),
+            StoreError::InvalidName(n) => {
+                format!("Invalid profile name: {n:?}. Use letters, digits, - and _ (max 64 chars).")
+            }
             StoreError::NotFound(n) => format!("Profile \"{n}\" not found."),
             StoreError::AlreadyExists(n) => format!("Profile \"{n}\" already exists."),
             StoreError::CorruptConfig => "CONFIG_CORRUPT".to_string(),
@@ -178,7 +191,11 @@ pub fn add_profile(name: &str, kind: ProfileKind) -> Result<(), StoreError> {
         return Err(StoreError::AlreadyExists(name.to_string()));
     }
     fs::create_dir_all(profile_dir(name)?).map_err(|e| StoreError::Io(e.to_string()))?;
-    c.profiles.push(Profile { name: name.to_string(), kind });
+    c.profiles.push(Profile {
+        name: name.to_string(),
+        kind,
+        extra: serde_json::Map::new(),
+    });
     c.failover_order.push(name.to_string());
     if c.active.is_none() {
         c.active = Some(name.to_string());
@@ -333,6 +350,91 @@ mod tests {
         assert!(raw.contains("\"failoverOrder\""));
         assert!(raw.contains("\"api-key\""));
         assert!(raw.ends_with("\n")); // trailing newline like the TS atomic writer
+    }
+
+    /// Regression for a real forward-compat bug: unknown top-level and
+    /// profile-level fields (as a future CLI version might add) must
+    /// survive an app write byte-identical in value, not be silently
+    /// dropped by the fixed-field struct's re-serialization.
+    #[test]
+    #[serial]
+    fn set_active_preserves_unknown_config_and_profile_fields() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+
+        let tampered = br#"{"profiles":[{"name":"work","kind":"subscription","createdAt":123}],"active":null,"failoverEnabled":true,"failoverOrder":["work"],"telemetryOptIn":false}"#;
+        std::fs::write(config_path(), tampered).unwrap();
+
+        set_active("work").unwrap();
+        let raw = std::fs::read_to_string(config_path()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        env::remove_var("CCM_HOME");
+
+        assert_eq!(v["telemetryOptIn"], serde_json::json!(false));
+        assert_eq!(v["profiles"][0]["createdAt"], serde_json::json!(123));
+        assert_eq!(v["active"], serde_json::json!("work"));
+    }
+
+    fn contract_fixtures_dir() -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..")
+            .join("contract-fixtures")
+    }
+
+    /// I4: wires `contract-fixtures/config.json` into the Rust suite so the
+    /// two suites agree on the config contract, not just the usage one.
+    /// Also doubles as the Rust half of the unknown-field-preservation
+    /// assert — the single check that would have caught I1.
+    #[test]
+    #[serial]
+    fn config_contract_fixture_round_trips_with_canonical_casing_and_unknown_field_preserved() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        std::fs::copy(contract_fixtures_dir().join("config.json"), config_path()).unwrap();
+
+        let c = load_config().unwrap();
+        assert_eq!(c.profiles.len(), 2);
+        assert_eq!(c.profiles[0].name, "Work"); // canonical casing preserved
+        assert_eq!(c.profiles[0].kind, ProfileKind::Subscription);
+        assert_eq!(c.profiles[1].name, "bot");
+        assert_eq!(c.profiles[1].kind, ProfileKind::ApiKey);
+        assert_eq!(c.active.as_deref(), Some("Work"));
+        assert!(c.failover_enabled);
+        assert_eq!(c.failover_order, vec!["Work", "bot"]);
+        assert_eq!(
+            c.extra.get("telemetryOptIn"),
+            Some(&serde_json::json!(false))
+        );
+
+        set_active("bot").unwrap();
+        let raw = std::fs::read_to_string(config_path()).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        env::remove_var("CCM_HOME");
+
+        assert_eq!(v["telemetryOptIn"], serde_json::json!(false));
+        assert_eq!(v["active"], serde_json::json!("bot"));
+    }
+
+    /// I4: wires `contract-fixtures/config-corrupt.json` into the Rust
+    /// suite — the TS suite asserts `loadConfig()` rejects on the same
+    /// fixture (its real semantics, since `readJson` only treats ENOENT as
+    /// "missing"); Rust's equivalent is `CONFIG_CORRUPT`.
+    #[test]
+    #[serial]
+    fn config_corrupt_contract_fixture_yields_config_corrupt() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        std::fs::copy(
+            contract_fixtures_dir().join("config-corrupt.json"),
+            config_path(),
+        )
+        .unwrap();
+
+        let err = load_config().unwrap_err();
+        env::remove_var("CCM_HOME");
+
+        assert!(matches!(err, StoreError::CorruptConfig));
     }
 
     #[test]

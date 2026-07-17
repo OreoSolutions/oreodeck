@@ -5,5 +5,6 @@
   ],
   "active": "Work",
   "failoverEnabled": true,
-  "failoverOrder": ["Work", "bot"]
+  "failoverOrder": ["Work", "bot"],
+  "telemetryOptIn": false
 }

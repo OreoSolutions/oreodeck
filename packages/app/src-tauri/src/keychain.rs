@@ -107,7 +107,9 @@ mod tests {
         // (Smoke: the message templates below hold no key by construction.)
         with_throwaway_service(|| {
             set_api_key(P, "sk-ant-secret").unwrap();
-            let msg = get_api_key(P).map(|_| String::new()).unwrap_or_else(|e| e.message().to_string());
+            let msg = get_api_key(P)
+                .map(|_| String::new())
+                .unwrap_or_else(|e| e.message().to_string());
             assert!(!msg.contains("sk-ant-secret"));
         });
     }

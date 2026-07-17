@@ -48,7 +48,10 @@ fn kind_str(k: store::ProfileKind) -> String {
 }
 
 fn is_active(active: &Option<String>, name: &str) -> bool {
-    active.as_deref().map(|a| a.eq_ignore_ascii_case(name)).unwrap_or(false)
+    active
+        .as_deref()
+        .map(|a| a.eq_ignore_ascii_case(name))
+        .unwrap_or(false)
 }
 
 fn now_ms() -> i64 {
@@ -152,6 +155,10 @@ where
     let profile = store::get_profile(name)
         .map_err(|e| e.message())?
         .ok_or_else(|| store::StoreError::NotFound(name.to_string()).message())?;
+    // Refuse cleanly before touching the Keychain: a hand-tampered
+    // config.json could carry an invalid stored name, and the Keychain must
+    // never be called for a name that will be rejected anyway.
+    store::assert_valid_name(&profile.name).map_err(|e| e.message())?;
     delete_key(&profile.name)?;
     store::remove_profile(&profile.name).map_err(|e| e.message())
 }
@@ -168,7 +175,10 @@ pub async fn remove_profile(name: String) -> Result<(), String> {
 #[tauri::command]
 pub fn get_failover() -> Result<FailoverView, String> {
     let c = store::load_config().map_err(|e| e.message())?;
-    Ok(FailoverView { enabled: c.failover_enabled, order: c.failover_order })
+    Ok(FailoverView {
+        enabled: c.failover_enabled,
+        order: c.failover_order,
+    })
 }
 
 #[tauri::command]
@@ -197,7 +207,9 @@ pub async fn open_login_terminal(name: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn check_cli() -> CliStatus {
-    CliStatus { installed: terminal::check_cli() }
+    CliStatus {
+        installed: terminal::check_cli(),
+    }
 }
 
 /// `async`: blocks on `Command::status()` to launch the `open` process, so
@@ -337,6 +349,33 @@ mod tests {
         });
     }
 
+    /// M5 regression: `get_profile` does not validate, so a hand-tampered
+    /// config.json can carry an invalid stored name (e.g. from a
+    /// `../`-style traversal attempt). `remove_profile_with` must reject via
+    /// `assert_valid_name` BEFORE the Keychain is ever touched, not just
+    /// before the store write — the injected `delete_key` panics if called,
+    /// so this fails loudly if that ordering regresses.
+    #[test]
+    #[serial]
+    fn remove_profile_rejects_tampered_stored_name_before_any_keychain_call() {
+        with_ccm_home(|| {
+            let tampered = b"{\"profiles\":[{\"name\":\"../../escape\",\"kind\":\"subscription\"}],\"active\":null,\"failoverEnabled\":true,\"failoverOrder\":[]}\n";
+            std::fs::write(store::config_path(), tampered).unwrap();
+
+            let result = remove_profile_with("../../escape", |_| {
+                panic!("keychain must not be touched for a tampered/invalid stored name");
+            });
+
+            match result {
+                Err(msg) => assert!(
+                    msg.starts_with("Invalid profile name"),
+                    "unexpected error message: {msg}"
+                ),
+                Ok(()) => panic!("expected rejection of a tampered stored name"),
+            }
+        });
+    }
+
     // --- add_api_key_profile_with ---
 
     #[test]
@@ -362,7 +401,10 @@ mod tests {
 
                 assert!(result.is_ok());
                 assert!(store::get_profile("bot").unwrap().is_some());
-                assert_eq!(keychain::get_api_key("bot").unwrap().as_deref(), Some("sk-ant-x"));
+                assert_eq!(
+                    keychain::get_api_key("bot").unwrap().as_deref(),
+                    Some("sk-ant-x")
+                );
                 let _ = keychain::delete_api_key("bot");
             });
         });
@@ -394,7 +436,10 @@ mod tests {
 
             set_active("personal".to_string()).unwrap();
 
-            assert_eq!(store::load_config().unwrap().active.as_deref(), Some("personal"));
+            assert_eq!(
+                store::load_config().unwrap().active.as_deref(),
+                Some("personal")
+            );
         });
     }
 

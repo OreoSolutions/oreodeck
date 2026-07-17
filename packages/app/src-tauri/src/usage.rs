@@ -49,10 +49,22 @@ struct Price {
 /// USD/1M token. Model lạ ⇒ None ⇒ cost 0. Khớp bảng PRICING trong usage.ts.
 fn pricing(model: &str) -> Option<Price> {
     match model {
-        "claude-opus-4-8" => Some(Price { input: 5.0, output: 25.0 }),
-        "claude-sonnet-5" => Some(Price { input: 3.0, output: 15.0 }),
-        "claude-haiku-4-5" => Some(Price { input: 1.0, output: 5.0 }),
-        "claude-fable-5" => Some(Price { input: 10.0, output: 50.0 }),
+        "claude-opus-4-8" => Some(Price {
+            input: 5.0,
+            output: 25.0,
+        }),
+        "claude-sonnet-5" => Some(Price {
+            input: 3.0,
+            output: 15.0,
+        }),
+        "claude-haiku-4-5" => Some(Price {
+            input: 1.0,
+            output: 5.0,
+        }),
+        "claude-fable-5" => Some(Price {
+            input: 10.0,
+            output: 50.0,
+        }),
         _ => None,
     }
 }
@@ -78,7 +90,9 @@ pub fn parse_transcript_line(line: &str) -> Option<UsageEntry> {
     let usage = message.get("usage").and_then(Value::as_object)?;
 
     let ts_str = obj.get("timestamp").and_then(Value::as_str).unwrap_or("");
-    let timestamp = DateTime::parse_from_rfc3339(ts_str).ok()?.timestamp_millis();
+    let timestamp = DateTime::parse_from_rfc3339(ts_str)
+        .ok()?
+        .timestamp_millis();
 
     let (cw5m, cw1h) = match usage.get("cache_creation").and_then(Value::as_object) {
         Some(cc) => (
@@ -91,7 +105,11 @@ pub fn parse_transcript_line(line: &str) -> Option<UsageEntry> {
 
     Some(UsageEntry {
         timestamp,
-        model: message.get("model").and_then(Value::as_str).unwrap_or("").to_string(),
+        model: message
+            .get("model")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string(),
         input_tokens: num(usage.get("input_tokens")),
         cache_write_5m_tokens: cw5m,
         cache_write_1h_tokens: cw1h,
@@ -116,16 +134,23 @@ pub fn estimate_cost_usd(e: &UsageEntry) -> f64 {
 }
 
 /// Đệ quy tìm mọi *.jsonl dưới dir. Thư mục thiếu / lỗi đọc ⇒ bỏ qua.
+///
+/// Dùng `DirEntry::file_type()` (không theo symlink) thay vì `Path::is_dir()`
+/// / `is_file()` (có theo symlink), khớp `Dirent.isDirectory()` /
+/// `e.isFile()` của usage.ts — nếu không, một symlink dưới
+/// `projects/` có thể đưa việc đọc/tính tiền transcript ra ngoài biên giới
+/// profile trong khi CLI báo 0.
 fn list_transcript_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let entries = match fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return,
     };
     for entry in entries.flatten() {
+        let Ok(ft) = entry.file_type() else { continue };
         let path = entry.path();
-        if path.is_dir() {
+        if ft.is_dir() {
             list_transcript_files(&path, out);
-        } else if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+        } else if ft.is_file() && path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
             out.push(path);
         }
     }
@@ -278,15 +303,23 @@ mod tests {
             .join("..")
             .join("..")
             .join("contract-fixtures");
-        let expected: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(fixtures.join("expected-usage.json")).unwrap())
-                .unwrap();
+        let expected: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(fixtures.join("expected-usage.json")).unwrap(),
+        )
+        .unwrap();
 
         let dir = tempfile::tempdir().unwrap();
         env::set_var("CCM_HOME", dir.path());
-        let proj = crate::store::profile_dir("work").unwrap().join("projects").join("demo");
+        let proj = crate::store::profile_dir("work")
+            .unwrap()
+            .join("projects")
+            .join("demo");
         std::fs::create_dir_all(&proj).unwrap();
-        std::fs::copy(fixtures.join("transcript.jsonl"), proj.join("session.jsonl")).unwrap();
+        std::fs::copy(
+            fixtures.join("transcript.jsonl"),
+            proj.join("session.jsonl"),
+        )
+        .unwrap();
 
         let now = expected["nowMs"].as_i64().unwrap();
         let u = read_profile_usage("work", now);
@@ -295,8 +328,14 @@ mod tests {
         let ex = &expected["usage"];
         assert_eq!(u.entries, ex["entries"].as_i64().unwrap());
         assert_eq!(u.input_tokens, ex["inputTokens"].as_i64().unwrap());
-        assert_eq!(u.cache_write_5m_tokens, ex["cacheWrite5mTokens"].as_i64().unwrap());
-        assert_eq!(u.cache_write_1h_tokens, ex["cacheWrite1hTokens"].as_i64().unwrap());
+        assert_eq!(
+            u.cache_write_5m_tokens,
+            ex["cacheWrite5mTokens"].as_i64().unwrap()
+        );
+        assert_eq!(
+            u.cache_write_1h_tokens,
+            ex["cacheWrite1hTokens"].as_i64().unwrap()
+        );
         assert_eq!(u.cache_read_tokens, ex["cacheReadTokens"].as_i64().unwrap());
         assert_eq!(u.output_tokens, ex["outputTokens"].as_i64().unwrap());
         assert_eq!(u.total_tokens, ex["totalTokens"].as_i64().unwrap());
@@ -315,5 +354,51 @@ mod tests {
         assert_eq!(u.entries, 0);
         assert_eq!(u.total_tokens, 0);
         assert_eq!(u.reset_at, None);
+    }
+
+    /// Regression: the transcript walker must use `DirEntry::file_type()`
+    /// (not `Path::is_dir()`/`is_file()`, which follow symlinks), so a
+    /// symlinked directory or file under `projects/` can never pull
+    /// transcripts from outside the profile boundary into the app's
+    /// usage/cost numbers — matching TS's `Dirent.isDirectory()`/`isFile()`,
+    /// which describe the directory entry itself and skip symlinks.
+    #[test]
+    #[serial]
+    fn list_transcript_files_ignores_symlinked_dir_and_file() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().unwrap();
+        env::set_var("CCM_HOME", dir.path());
+        crate::store::add_profile("work", crate::store::ProfileKind::Subscription).unwrap();
+
+        // Outside-the-profile tree holding a real, billable transcript.
+        let outside = dir.path().join("outside");
+        std::fs::create_dir_all(&outside).unwrap();
+        let outside_transcript = outside.join("session.jsonl");
+        std::fs::write(
+            &outside_transcript,
+            r#"{"type":"assistant","timestamp":"2026-07-16T10:00:00.000Z","message":{"model":"claude-opus-4-8","usage":{"input_tokens":777,"output_tokens":0}}}"#,
+        )
+        .unwrap();
+
+        let projects = crate::store::profile_dir("work").unwrap().join("projects");
+        std::fs::create_dir_all(&projects).unwrap();
+        // Symlinked directory escaping the profile.
+        symlink(&outside, projects.join("link-dir")).unwrap();
+        // Symlinked .jsonl file escaping the profile directly.
+        symlink(&outside_transcript, projects.join("link-file.jsonl")).unwrap();
+
+        let now = DateTime::parse_from_rfc3339("2026-07-16T12:00:00.000Z")
+            .unwrap()
+            .timestamp_millis();
+        let u = read_profile_usage("work", now);
+        env::remove_var("CCM_HOME");
+
+        assert_eq!(
+            u.entries, 0,
+            "symlinked dir/file must be ignored, not walked/counted"
+        );
+        assert_eq!(u.input_tokens, 0);
+        assert_eq!(u.total_tokens, 0);
     }
 }
