@@ -1,4 +1,5 @@
 pub mod store;
+pub mod usage;
 
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
