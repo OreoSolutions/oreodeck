@@ -21,6 +21,9 @@ public struct ProfilesTab: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if let actionError = model.actionError {
+                ActionErrorBanner(message: actionError) { model.dismissActionError() }
+            }
             if model.rows.isEmpty {
                 ContentUnavailableView(
                     "No profiles yet",
@@ -95,13 +98,67 @@ public struct ProfilesTab: View {
     }
 }
 
+/// Renders `AppModel.actionError`, dismissibly. This is the fix for the
+/// Critical finding on Task 3's review: the model already turned every
+/// failure on the three new actions (add-api-key, add-subscription,
+/// remove) into human copy via `message(for:)`, but nothing ever showed it —
+/// sheets dismissed regardless of outcome and the string was set but never
+/// read outside `AppModel`. `add-subscription`'s terminal-open failure and
+/// poll timeout land here too, since that sheet always dismisses immediately
+/// (see `AddSubscriptionSheet` below) and has nothing else on screen to show
+/// the error once it's gone.
+private struct ActionErrorBanner: View {
+    let message: String
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            Text(message)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityLabel("Dismiss")
+        }
+        .padding(10)
+        .background(Color.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
 /// Opens `ccm add <name>` in Terminal, then polls. The Tauri version used
 /// `window.prompt` here — which does nothing at all in a packaged webview, so
 /// the feature was dead on arrival. A real SwiftUI form cannot fail that way.
+///
+/// Always dismisses on submit, success or failure: unlike `AddApiKeySheet`
+/// there is nothing in this form worth correcting and resubmitting — a
+/// terminal-open failure or a 5-minute poll timeout aren't caused by
+/// anything typed here, and the poll itself takes far too long to hold a
+/// modal sheet open for. Both failure paths (`AppModel.addSubscriptionProfile`)
+/// land in `actionError`, surfaced by `ActionErrorBanner` in `ProfilesTab`
+/// once this sheet is gone.
 struct AddSubscriptionSheet: View {
     @ObservedObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
-    @State private var name = ""
+    @State private var name: String
+
+    /// `initialName` exists so tests can pin the trim-at-submit fix (Task 3
+    /// review, Minor finding) by presetting untrimmed `@State` up front —
+    /// ViewInspector can't drive a live `TextField` edit through a plain
+    /// `@State` without hosting the view in a real window loop, which this
+    /// package has no need for elsewhere. Production call sites never pass
+    /// this; it defaults to empty, same as before.
+    init(model: AppModel, initialName: String = "") {
+        self.model = model
+        self._name = State(initialValue: initialName)
+    }
 
     var body: some View {
         Form {
@@ -114,7 +171,7 @@ struct AddSubscriptionSheet: View {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                 Button("Open Terminal") {
-                    let profileName = name
+                    let profileName = name.trimmingCharacters(in: .whitespaces)
                     dismiss()
                     Task { await model.addSubscriptionProfile(name: profileName) }
                 }
@@ -127,11 +184,19 @@ struct AddSubscriptionSheet: View {
     }
 }
 
+/// Unlike `AddSubscriptionSheet`, a failure here (most commonly
+/// `AlreadyExists` or a Keychain write failure) is directly correctable —
+/// the user just needs a different name and to retype the key — so this
+/// sheet stays open and shows the error inline instead of dismissing into
+/// the banner behind it. `model.actionError` is cleared on `onAppear` so a
+/// stale error from some earlier, unrelated action can't leak into a fresh
+/// sheet before this one has submitted anything.
 struct AddApiKeySheet: View {
     @ObservedObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var key = ""
+    @State private var isSubmitting = false
 
     var body: some View {
         Form {
@@ -144,6 +209,15 @@ struct AddApiKeySheet: View {
             Text("The key goes straight into the macOS Keychain (service com.oreo.ccm). It is never written to config.json.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if let actionError = model.actionError {
+                Label {
+                    Text(actionError)
+                } icon: {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                }
+                .foregroundStyle(.red)
+                .font(.callout)
+            }
             HStack {
                 Spacer()
                 Button("Cancel") {
@@ -151,26 +225,45 @@ struct AddApiKeySheet: View {
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
-                Button("Add") {
-                    let profileName = name
-                    let profileKey = key
-                    key = ""  // no key material outstanding past the round-trip
-                    dismiss()
-                    Task { await model.addApiKeyProfile(name: profileName, key: profileKey) }
+                Button(isSubmitting ? "Adding…" : "Add") {
+                    submit()
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(
-                    name.trimmingCharacters(in: .whitespaces).isEmpty
+                    isSubmitting
+                        || name.trimmingCharacters(in: .whitespaces).isEmpty
                         || key.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
+        .onAppear { model.dismissActionError() }
         .padding(16)
         .frame(width: 420)
+    }
+
+    private func submit() {
+        let profileName = name
+        let profileKey = key
+        key = ""  // no key material outstanding past the round-trip
+        isSubmitting = true
+        Task {
+            await model.addApiKeyProfile(name: profileName, key: profileKey)
+            isSubmitting = false
+            if model.actionError == nil {
+                dismiss()
+            }
+        }
     }
 }
 
 /// Destructive and irreversible (the profile directory is deleted), so the user
 /// has to type the name exactly — same bar as `ccm remove`.
+///
+/// Dismisses on submit regardless of outcome, unlike `AddApiKeySheet`: the
+/// confirmation the user typed is already correct by the time "Remove" is
+/// enabled (it matches `row.name`), so there is nothing about this form to
+/// retype after a failure — a Keychain error here is a system-level problem,
+/// not a form-input one. Failure lands in `actionError`, surfaced by
+/// `ActionErrorBanner` once this sheet is gone.
 struct RemoveProfileSheet: View {
     @ObservedObject var model: AppModel
     let row: ProfileRow

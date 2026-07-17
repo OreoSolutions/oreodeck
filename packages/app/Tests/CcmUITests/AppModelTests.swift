@@ -117,6 +117,15 @@ import Testing
 @Test func addSubscriptionOpensTerminalThenPollsUntilTheProfileAppears() async {
     // This is the flow the Tauri version shipped DEAD. It gets an automated
     // test AND a manual smoke item — one is not a substitute for the other.
+    //
+    // Deterministic on purpose (Task 3 review, Important finding): the
+    // previous version raced a fixed `Task.sleep(100ms)` against however
+    // long the spawned `Task` above took to get its first scheduling slot —
+    // reproduced by the reviewer at ~19% failure. `waitUntil` instead polls
+    // `model.pendingSubscription`, the real signal `addSubscriptionProfile`
+    // sets (deterministically, after its terminal-open await and before its
+    // first poll sleep — see `AppModel.swift`), so this only proceeds once
+    // that has actually happened, with no wall-clock guess involved.
     let backend = FakeBackend()
     let model = AppModel(backend: backend)
 
@@ -124,12 +133,11 @@ import Testing
         await model.addSubscriptionProfile(
             name: "work", pollInterval: .milliseconds(5), timeout: .seconds(5))
     }
-    // Give the poll a moment, then simulate the human finishing /login. 100ms
-    // (not the brief's 30ms) to stay reliable under swift-testing's parallel
-    // test execution, which can starve the new Task's first scheduling slot.
-    try? await Task.sleep(for: .milliseconds(100))
+
+    let sawPending = await waitUntil { model.pendingSubscription == "work" }
+    #expect(sawPending, "addSubscriptionProfile should set pendingSubscription before its first poll")
     #expect(backend.openLoginTerminalCalls == ["work"])
-    #expect(model.pendingSubscription == "work")
+
     backend.simulateLoginCompleted(name: "work")
     await task.value
 

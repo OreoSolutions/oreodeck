@@ -23,6 +23,17 @@ let package = Package(
     // .v15 floor: `.defaultLaunchBehavior(.suppressed)` (macOS 15+) keeps the
     // dashboard Window from auto-opening at launch — this is a menu-bar agent.
     platforms: [.macOS(.v15)],
+    // ViewInspector: test-only, linked only into CcmUITests below (never into
+    // CcmApp/CcmUI), so it adds nothing to the shipped app or its 0-warning
+    // release build. Added for the Task 3 review's Critical finding — the
+    // model already turned every action failure into human copy, but nothing
+    // rendered it, and that class of gap is invisible to a `swift test`-only
+    // strategy without a way to assert on the actual SwiftUI render tree
+    // (`screencapture`/Accessibility are unavailable in this sandbox, so a
+    // human-eyes check alone can't be the only net either).
+    dependencies: [
+        .package(url: "https://github.com/nalexn/ViewInspector", from: "0.9.0")
+    ],
     targets: [
         // Header-only C target wrapping the uniffi-generated header + modulemap
         // so Swift can `import ccm_coreFFI`. The symbols themselves come from
@@ -53,7 +64,7 @@ let package = Package(
         ),
         .testTarget(
             name: "CcmUITests",
-            dependencies: ["CcmUI", "CcmKit"],
+            dependencies: ["CcmUI", "CcmKit", "ViewInspector"],
             path: "Tests/CcmUITests",
             linkerSettings: rustLinkFlags
         ),
