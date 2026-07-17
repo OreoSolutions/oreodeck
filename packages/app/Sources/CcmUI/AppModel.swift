@@ -129,4 +129,69 @@ public final class AppModel: ObservableObject {
         let backend = self.backend
         await perform { try backend.openConfigInEditor() }
     }
+
+    /// `key` is key material. It is handed to the core and forgotten here: it
+    /// is never stored on the model, never logged, and never interpolated into
+    /// an error. The view clears its `SecureField` the moment this returns.
+    public func addApiKeyProfile(name: String, key: String) async {
+        let backend = self.backend
+        await perform { try backend.addApiKeyProfile(name: name, key: key) }
+    }
+
+    /// Opens `ccm add <name>` in Terminal (the OAuth /login flow only works in
+    /// a real terminal) and then polls the config until the profile shows up —
+    /// there is no callback from Terminal, so polling is the only signal.
+    ///
+    /// `pollInterval`/`timeout` are parameters rather than an injected Clock:
+    /// tests pass milliseconds and stay fast, at the cost of not being able to
+    /// assert the exact production cadence. Worth it — the flow being alive at
+    /// all is what matters, and that is what the Tauri version got wrong.
+    ///
+    /// Both the terminal launch and each poll's read go through the same
+    /// off-actor hop as every other backend call on this class (`load()` /
+    /// `perform()`) — `open_login_terminal` spawns a process and `load()`
+    /// walks config + transcripts, neither of which may run on the main actor.
+    public func addSubscriptionProfile(
+        name: String,
+        pollInterval: Duration = .seconds(2),
+        timeout: Duration = .seconds(300)
+    ) async {
+        let backend = self.backend
+        do {
+            try await Task.detached { try backend.openLoginTerminal(name: name) }.value
+        } catch let error as CcmError {
+            actionError = message(for: error)
+            return
+        } catch {
+            actionError = "Terminal could not be opened."
+            return
+        }
+
+        pendingSubscription = name
+        defer { pendingSubscription = nil }
+
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            do {
+                try await Task.sleep(for: pollInterval)
+            } catch {
+                return  // cancelled
+            }
+            await load()
+            if rows.contains(where: { $0.name.lowercased() == name.lowercased() }) {
+                actionError = nil
+                return
+            }
+        }
+        actionError =
+            "Timed out waiting for \"\(name)\" to finish logging in. Finish the login in Terminal, then reopen this window."
+    }
+
+    /// The canonicalize → Keychain → store ordering lives in the core
+    /// (`api::remove_profile_with`) and is pinned by its own Rust tests. Do not
+    /// second-guess any part of it from here.
+    public func removeProfile(name: String) async {
+        let backend = self.backend
+        await perform { try backend.removeProfile(name: name) }
+    }
 }

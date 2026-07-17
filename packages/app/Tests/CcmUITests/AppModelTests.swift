@@ -74,3 +74,111 @@ import Testing
     #expect(model.loadError == .ConfigCorrupt)
     #expect(model.rows.isEmpty)
 }
+
+// MARK: - Profiles tab actions
+//
+// Deviation from the Task 3 brief: the brief's snippets call
+// `addApiKeyProfile`/`removeProfile` synchronously. That predates the Task 2
+// Critical fix (a659d42) that made every backend-touching AppModel method
+// `async` and route through `perform`'s `Task.detached` hop. These tests
+// call the async versions instead, to stay consistent with that
+// established, load-bearing pattern rather than reintroduce a
+// main-actor-blocking call.
+
+@MainActor
+@Test func addApiKeyProfilePassesTheKeyStraightThroughAndNeverKeepsIt() async {
+    let backend = FakeBackend()
+    let model = AppModel(backend: backend)
+
+    await model.addApiKeyProfile(name: "bot", key: "sk-ant-supersecret")
+
+    #expect(backend.addApiKeyCalls.count == 1)
+    #expect(backend.addApiKeyCalls[0].name == "bot")
+    #expect(backend.addApiKeyCalls[0].key == "sk-ant-supersecret")
+    // Nothing on the model may retain key material after the round-trip.
+    #expect(model.actionError == nil)
+    #expect(!model.rows.contains { $0.name.contains("sk-ant") })
+}
+
+@MainActor
+@Test func addApiKeyProfileSurfacesAKeychainFailureAsHumanCopyWithoutTheKey() async {
+    let backend = FakeBackend()
+    backend.addApiKeyError = .Keychain(
+        message: "Failed to save API key for profile \"bot\" to macOS Keychain.")
+    let model = AppModel(backend: backend)
+
+    await model.addApiKeyProfile(name: "bot", key: "sk-ant-supersecret")
+
+    #expect(model.actionError == "Failed to save API key for profile \"bot\" to macOS Keychain.")
+    #expect(!(model.actionError ?? "").contains("sk-ant-supersecret"))
+}
+
+@MainActor
+@Test func addSubscriptionOpensTerminalThenPollsUntilTheProfileAppears() async {
+    // This is the flow the Tauri version shipped DEAD. It gets an automated
+    // test AND a manual smoke item — one is not a substitute for the other.
+    let backend = FakeBackend()
+    let model = AppModel(backend: backend)
+
+    let task = Task { @MainActor in
+        await model.addSubscriptionProfile(
+            name: "work", pollInterval: .milliseconds(5), timeout: .seconds(5))
+    }
+    // Give the poll a moment, then simulate the human finishing /login. 100ms
+    // (not the brief's 30ms) to stay reliable under swift-testing's parallel
+    // test execution, which can starve the new Task's first scheduling slot.
+    try? await Task.sleep(for: .milliseconds(100))
+    #expect(backend.openLoginTerminalCalls == ["work"])
+    #expect(model.pendingSubscription == "work")
+    backend.simulateLoginCompleted(name: "work")
+    await task.value
+
+    #expect(model.rows.map(\.name) == ["work"])
+    #expect(model.pendingSubscription == nil)
+    #expect(model.actionError == nil)
+}
+
+@MainActor
+@Test func addSubscriptionGivesUpWithHumanCopyWhenTheLoginNeverFinishes() async {
+    let backend = FakeBackend()
+    let model = AppModel(backend: backend)
+
+    await model.addSubscriptionProfile(
+        name: "work", pollInterval: .milliseconds(5), timeout: .milliseconds(30))
+
+    #expect(model.pendingSubscription == nil)
+    #expect(model.actionError?.contains("work") == true)
+    #expect(model.rows.isEmpty)
+}
+
+@MainActor
+@Test func removeProfileDelegatesTheWholeOrderedTeardownToTheCore() async {
+    // The canonicalize → keychain → store ordering lives in Rust
+    // (api::remove_profile_with) and is pinned by cargo tests. The model's job
+    // is to call it once with what the user typed and reload — no second
+    // opinion, no reordering, no local Keychain call.
+    let backend = FakeBackend()
+    backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)])
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    await model.removeProfile(name: "work")
+
+    #expect(backend.removeCalls == ["work"])
+    #expect(model.rows.isEmpty)
+}
+
+@MainActor
+@Test func removeProfileSurfacesATypedFailureAsHumanCopyAndKeepsTheRow() async {
+    let backend = FakeBackend()
+    backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)])
+    backend.removeError = .Keychain(
+        message: "Failed to delete API key for profile \"work\" from macOS Keychain.")
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    await model.removeProfile(name: "work")
+
+    #expect(model.actionError == "Failed to delete API key for profile \"work\" from macOS Keychain.")
+    #expect(model.rows.map(\.name) == ["work"], "a failed remove must leave the profile recoverable")
+}

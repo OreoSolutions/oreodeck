@@ -12,7 +12,7 @@ public struct DashboardView: View {
 
     public var body: some View {
         TabView {
-            Text("Profiles — Task 3")
+            ProfilesTab(model: model)
                 .tabItem { Label("Profiles", systemImage: "person.2") }
             Text("Usage — Task 4")
                 .tabItem { Label("Usage", systemImage: "chart.bar") }
