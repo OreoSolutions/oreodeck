@@ -2,6 +2,7 @@ pub mod store;
 pub mod usage;
 pub mod keychain;
 pub mod terminal;
+pub mod commands;
 
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -10,6 +11,20 @@ use tauri::{
 
 pub fn run() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            commands::list_profiles,
+            commands::get_usage,
+            commands::set_active,
+            commands::add_api_key_profile,
+            commands::remove_profile,
+            commands::get_failover,
+            commands::set_failover_enabled,
+            commands::set_failover_order,
+            commands::open_session,
+            commands::open_login_terminal,
+            commands::check_cli,
+            commands::open_config_in_editor,
+        ])
         .setup(|app| {
             // Menu-bar app: no Dock icon, no App Switcher entry.
             #[cfg(target_os = "macos")]
