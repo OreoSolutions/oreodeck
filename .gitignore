@@ -6,5 +6,3 @@ dist/
 target/
 packages/app/dist/
 packages/app/src-tauri/gen/
-packages/app/src-tauri/app-icon.png
-packages/app/src-tauri/icons/

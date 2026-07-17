@@ -10,9 +10,11 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
-            let icon = app.default_window_icon().unwrap().clone();
-            let _tray = TrayIconBuilder::with_id("ccm-tray")
-                .icon(icon)
+            let mut tray_builder = TrayIconBuilder::with_id("ccm-tray");
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+            let _tray = tray_builder
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
