@@ -1,17 +1,68 @@
-use serde::Serialize;
-
 use crate::{keychain, store, terminal, usage};
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+/// Typed error surface for Swift. Replaces the Tauri version's stringly
+/// `Result<_, String>` (whose `"CONFIG_CORRUPT"` sentinel leaked raw to
+/// users). Swift `switch`es on these variants — it must never compare
+/// strings. Invariant: no variant ever carries key material; `Keychain`
+/// messages come from `keychain.rs`, which swallows the OS error and emits a
+/// fixed template naming only the profile.
+#[derive(Debug, thiserror::Error, uniffi::Error)]
+pub enum CcmError {
+    #[error("The ccm config file is not valid JSON and could not be read.")]
+    ConfigCorrupt,
+    #[error("{message}")]
+    InvalidName { name: String, message: String },
+    #[error("Profile \"{name}\" not found.")]
+    NotFound { name: String },
+    #[error("Profile \"{name}\" already exists.")]
+    AlreadyExists { name: String },
+    #[error("{message}")]
+    Io { message: String },
+    #[error("{message}")]
+    Keychain { message: String },
+}
+
+impl From<store::StoreError> for CcmError {
+    fn from(e: store::StoreError) -> Self {
+        // Map on the VARIANT, never by matching on message text.
+        let message = e.message();
+        match e {
+            store::StoreError::CorruptConfig => CcmError::ConfigCorrupt,
+            store::StoreError::InvalidName(name) => CcmError::InvalidName { name, message },
+            store::StoreError::NotFound(name) => CcmError::NotFound { name },
+            store::StoreError::AlreadyExists(name) => CcmError::AlreadyExists { name },
+            store::StoreError::Io(_) => CcmError::Io { message },
+        }
+    }
+}
+
+impl From<keychain::KeychainError> for CcmError {
+    fn from(e: keychain::KeychainError) -> Self {
+        CcmError::Keychain {
+            message: e.message().to_string(),
+        }
+    }
+}
+
+impl From<terminal::TermError> for CcmError {
+    fn from(e: terminal::TermError) -> Self {
+        // A TermError is a process/OS failure and its message is already
+        // human copy — Io is the honest bucket for it.
+        CcmError::Io {
+            message: e.message().to_string(),
+        }
+    }
+}
+
+#[derive(Debug, uniffi::Record)]
 pub struct ProfileView {
     pub name: String,
+    /// "subscription" | "api-key" — same wire values as config.json's `kind`.
     pub kind: String,
     pub active: bool,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, uniffi::Record)]
 pub struct ProfileUsageView {
     pub profile: String,
     pub kind: String,
@@ -22,21 +73,14 @@ pub struct ProfileUsageView {
     pub output_tokens: i64,
     pub total_tokens: i64,
     pub cost_usd: f64,
-    pub reset_at: Option<i64>,
-    pub active: bool,
+    /// None ⇒ no billable entry in the 5h window ⇒ UI shows "—".
+    pub reset_at_ms: Option<i64>,
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, uniffi::Record)]
 pub struct FailoverView {
     pub enabled: bool,
     pub order: Vec<String>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CliStatus {
-    pub installed: bool,
 }
 
 fn kind_str(k: store::ProfileKind) -> String {
@@ -62,8 +106,9 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
-pub fn list_profiles() -> Result<Vec<ProfileView>, String> {
-    let c = store::load_config().map_err(|e| e.message())?;
+#[uniffi::export]
+pub fn list_profiles() -> Result<Vec<ProfileView>, CcmError> {
+    let c = store::load_config()?;
     let active = c.active.clone();
     Ok(c.profiles
         .into_iter()
@@ -78,16 +123,15 @@ pub fn list_profiles() -> Result<Vec<ProfileView>, String> {
 /// Walks every profile's transcript directory (`usage::read_profile_usage`),
 /// which can be slow with a large usage history. Callers on a UI thread must
 /// hop off it themselves.
-pub fn get_usage() -> Result<Vec<ProfileUsageView>, String> {
-    let c = store::load_config().map_err(|e| e.message())?;
+#[uniffi::export]
+pub fn get_usage() -> Result<Vec<ProfileUsageView>, CcmError> {
+    let c = store::load_config()?;
     let now = now_ms();
-    let active = c.active.clone();
     Ok(c.profiles
         .into_iter()
         .map(|p| {
             let u = usage::read_profile_usage(&p.name, now);
             ProfileUsageView {
-                active: is_active(&active, &p.name),
                 profile: p.name,
                 kind: kind_str(p.kind),
                 input_tokens: u.input_tokens,
@@ -97,14 +141,15 @@ pub fn get_usage() -> Result<Vec<ProfileUsageView>, String> {
                 output_tokens: u.output_tokens,
                 total_tokens: u.total_tokens,
                 cost_usd: u.cost_usd,
-                reset_at: u.reset_at,
+                reset_at_ms: u.reset_at,
             }
         })
         .collect())
 }
 
-pub fn set_active(name: String) -> Result<(), String> {
-    store::set_active(&name).map_err(|e| e.message())
+#[uniffi::export]
+pub fn set_active(name: String) -> Result<(), CcmError> {
+    Ok(store::set_active(&name)?)
 }
 
 /// Testable core of `add_api_key_profile`. `set_key` is injected so tests can
@@ -112,11 +157,11 @@ pub fn set_active(name: String) -> Result<(), String> {
 /// without touching the real Keychain, to pin the rollback path: on failure
 /// the just-created profile is removed from config + disk and the ORIGINAL
 /// keychain error (not the rollback outcome) is returned.
-fn add_api_key_profile_with<S>(name: &str, key: &str, set_key: S) -> Result<(), String>
+fn add_api_key_profile_with<S>(name: &str, key: &str, set_key: S) -> Result<(), CcmError>
 where
-    S: FnOnce(&str, &str) -> Result<(), String>,
+    S: FnOnce(&str, &str) -> Result<(), CcmError>,
 {
-    store::add_profile(name, store::ProfileKind::ApiKey).map_err(|e| e.message())?;
+    store::add_profile(name, store::ProfileKind::ApiKey)?;
     if let Err(e) = set_key(name, key) {
         // Rollback: never leave a keyless api-key profile behind.
         let _ = store::remove_profile(name);
@@ -125,12 +170,11 @@ where
     Ok(())
 }
 
-/// Performs Keychain IO (and, on failure, a store rollback). Callers on a UI
-/// thread must hop off it themselves.
-pub fn add_api_key_profile(name: String, key: String) -> Result<(), String> {
-    add_api_key_profile_with(&name, &key, |n, k| {
-        keychain::set_api_key(n, k).map_err(|e| e.message().to_string())
-    })
+/// `key` is key material: it is passed straight to the Keychain and is never
+/// logged, echoed, or embedded in any error.
+#[uniffi::export]
+pub fn add_api_key_profile(name: String, key: String) -> Result<(), CcmError> {
+    add_api_key_profile_with(&name, &key, |n, k| Ok(keychain::set_api_key(n, k)?))
 }
 
 /// Testable core of `remove_profile`. Resolves the CANONICAL stored name
@@ -143,71 +187,75 @@ pub fn add_api_key_profile(name: String, key: String) -> Result<(), String> {
 /// store is touched, so the profile survives and is recoverable.
 /// `delete_key` is injected so tests can force a genuine Keychain failure
 /// deterministically without touching the real Keychain.
-fn remove_profile_with<D>(name: &str, delete_key: D) -> Result<(), String>
+fn remove_profile_with<D>(name: &str, delete_key: D) -> Result<(), CcmError>
 where
-    D: FnOnce(&str) -> Result<(), String>,
+    D: FnOnce(&str) -> Result<(), CcmError>,
 {
-    let profile = store::get_profile(name)
-        .map_err(|e| e.message())?
-        .ok_or_else(|| store::StoreError::NotFound(name.to_string()).message())?;
+    let profile = store::get_profile(name)?.ok_or_else(|| CcmError::NotFound {
+        name: name.to_string(),
+    })?;
     // Refuse cleanly before touching the Keychain: a hand-tampered
     // config.json could carry an invalid stored name, and the Keychain must
     // never be called for a name that will be rejected anyway.
-    store::assert_valid_name(&profile.name).map_err(|e| e.message())?;
+    store::assert_valid_name(&profile.name)?;
     delete_key(&profile.name)?;
-    store::remove_profile(&profile.name).map_err(|e| e.message())
+    Ok(store::remove_profile(&profile.name)?)
 }
 
-/// Performs Keychain IO before the store write. Callers on a UI thread must
-/// hop off it themselves.
-pub fn remove_profile(name: String) -> Result<(), String> {
-    remove_profile_with(&name, |canonical| {
-        keychain::delete_api_key(canonical).map_err(|e| e.message().to_string())
-    })
+#[uniffi::export]
+pub fn remove_profile(name: String) -> Result<(), CcmError> {
+    // `keychain::delete_api_key` maps errSecItemNotFound to Ok(()) — a
+    // subscription profile with no Keychain entry must still be removable.
+    remove_profile_with(&name, |canonical| Ok(keychain::delete_api_key(canonical)?))
 }
 
-pub fn get_failover() -> Result<FailoverView, String> {
-    let c = store::load_config().map_err(|e| e.message())?;
+#[uniffi::export]
+pub fn get_failover() -> Result<FailoverView, CcmError> {
+    let c = store::load_config()?;
     Ok(FailoverView {
         enabled: c.failover_enabled,
         order: c.failover_order,
     })
 }
 
-pub fn set_failover_enabled(enabled: bool) -> Result<(), String> {
-    store::set_failover_enabled(enabled).map_err(|e| e.message())
+#[uniffi::export]
+pub fn set_failover_enabled(on: bool) -> Result<(), CcmError> {
+    Ok(store::set_failover_enabled(on)?)
 }
 
-pub fn set_failover_order(order: Vec<String>) -> Result<(), String> {
-    store::set_failover_order(&order).map_err(|e| e.message())
+#[uniffi::export]
+pub fn set_failover_order(names: Vec<String>) -> Result<(), CcmError> {
+    Ok(store::set_failover_order(&names)?)
 }
 
-/// Blocks on `Command::status()` to launch Terminal.app via `osascript`.
-/// Callers on a UI thread must hop off it themselves.
-pub fn open_session(name: String) -> Result<(), String> {
-    terminal::open_session(&name).map_err(|e| e.message().to_string())
+/// `terminal::open_session` runs `assert_valid_name` itself before the name
+/// reaches the AppleScript/shell command — that check lives there, at the
+/// chokepoint, not here.
+#[uniffi::export]
+pub fn open_session(name: String) -> Result<(), CcmError> {
+    Ok(terminal::open_session(&name)?)
 }
 
-/// See `open_session` — same `osascript` spawn/block.
-pub fn open_login_terminal(name: String) -> Result<(), String> {
-    terminal::open_login_terminal(&name).map_err(|e| e.message().to_string())
+#[uniffi::export]
+pub fn open_login_terminal(name: String) -> Result<(), CcmError> {
+    Ok(terminal::open_login_terminal(&name)?)
 }
 
-pub fn check_cli() -> CliStatus {
-    CliStatus {
-        installed: terminal::check_cli(),
-    }
-}
-
-/// Blocks on `Command::status()` to launch the `open` process. Callers on a
-/// UI thread must hop off it themselves.
-pub fn open_config_in_editor() -> Result<(), String> {
+#[uniffi::export]
+pub fn open_config_in_editor() -> Result<(), CcmError> {
     std::process::Command::new("open")
         .arg("-t")
         .arg(store::config_path())
         .status()
-        .map_err(|_| "Could not open the config file.".to_string())?;
+        .map_err(|_| CcmError::Io {
+            message: "Could not open the config file.".to_string(),
+        })?;
     Ok(())
+}
+
+#[uniffi::export]
+pub fn check_cli() -> bool {
+    terminal::check_cli()
 }
 
 #[cfg(test)]
@@ -232,12 +280,12 @@ mod tests {
         env::remove_var("CCM_KEYCHAIN_SERVICE");
     }
 
-    fn real_delete(name: &str) -> Result<(), String> {
-        keychain::delete_api_key(name).map_err(|e| e.message().to_string())
+    fn real_delete(name: &str) -> Result<(), CcmError> {
+        Ok(keychain::delete_api_key(name)?)
     }
 
-    fn real_set(name: &str, key: &str) -> Result<(), String> {
-        keychain::set_api_key(name, key).map_err(|e| e.message().to_string())
+    fn real_set(name: &str, key: &str) -> Result<(), CcmError> {
+        Ok(keychain::set_api_key(name, key)?)
     }
 
     // --- remove_profile_with ---
@@ -301,9 +349,16 @@ mod tests {
         with_ccm_home(|| {
             store::add_profile("work", store::ProfileKind::Subscription).unwrap();
 
-            let result = remove_profile_with("work", |_| Err("a real keychain error".to_string()));
+            let result = remove_profile_with("work", |_| {
+                Err(CcmError::Keychain {
+                    message: "a real keychain error".to_string(),
+                })
+            });
 
-            assert_eq!(result, Err("a real keychain error".to_string()));
+            match result {
+                Err(CcmError::Keychain { message }) => assert_eq!(message, "a real keychain error"),
+                other => panic!("expected the ORIGINAL keychain error, got {other:?}"),
+            }
             // Store step must never have run: profile + dir survive.
             assert!(store::get_profile("work").unwrap().is_some());
             assert!(store::profile_dir("work").unwrap().exists());
@@ -317,7 +372,10 @@ mod tests {
             let result = remove_profile_with("ghost", |_| {
                 panic!("keychain must not be touched for an unknown profile");
             });
-            assert_eq!(result, Err("Profile \"ghost\" not found.".to_string()));
+            match result {
+                Err(CcmError::NotFound { name }) => assert_eq!(name, "ghost"),
+                other => panic!("expected NotFound, got {other:?}"),
+            }
         });
     }
 
@@ -338,13 +396,10 @@ mod tests {
                 panic!("keychain must not be touched for a tampered/invalid stored name");
             });
 
-            match result {
-                Err(msg) => assert!(
-                    msg.starts_with("Invalid profile name"),
-                    "unexpected error message: {msg}"
-                ),
-                Ok(()) => panic!("expected rejection of a tampered stored name"),
-            }
+            assert!(
+                matches!(result, Err(CcmError::InvalidName { .. })),
+                "expected InvalidName, got {result:?}"
+            );
         });
     }
 
@@ -355,10 +410,17 @@ mod tests {
     fn add_api_key_profile_rolls_back_and_surfaces_original_error_on_keychain_failure() {
         with_ccm_home(|| {
             let result = add_api_key_profile_with("bot", "sk-ant-x", |_, _| {
-                Err("original keychain error".to_string())
+                Err(CcmError::Keychain {
+                    message: "original keychain error".to_string(),
+                })
             });
 
-            assert_eq!(result, Err("original keychain error".to_string()));
+            match result {
+                Err(CcmError::Keychain { message }) => {
+                    assert_eq!(message, "original keychain error")
+                }
+                other => panic!("expected the ORIGINAL keychain error, got {other:?}"),
+            }
             assert!(store::get_profile("bot").unwrap().is_none());
             assert!(!store::profile_dir("bot").unwrap().exists());
         });
@@ -428,6 +490,97 @@ mod tests {
 
             assert!(!view.enabled);
             assert_eq!(view.order, vec!["bot", "work"]);
+        });
+    }
+
+    // --- typed CcmError mapping (uniffi layer) ---
+
+    #[test]
+    #[serial]
+    fn corrupt_config_surfaces_as_typed_config_corrupt_not_a_string_sentinel() {
+        with_ccm_home(|| {
+            std::fs::write(store::config_path(), b"{ not json").unwrap();
+            let err = list_profiles().unwrap_err();
+            assert!(matches!(err, CcmError::ConfigCorrupt));
+            // Regression guard for the Tauri version's real bug: the raw
+            // sentinel leaked to users as the error text.
+            assert!(!err.to_string().contains("CONFIG_CORRUPT"));
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn unknown_profile_surfaces_as_typed_not_found_with_the_name() {
+        with_ccm_home(|| {
+            let err = set_active("ghost".to_string()).unwrap_err();
+            match err {
+                CcmError::NotFound { name } => assert_eq!(name, "ghost"),
+                other => panic!("expected NotFound, got {other:?}"),
+            }
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn duplicate_name_surfaces_as_typed_already_exists() {
+        with_ccm_home(|| {
+            store::add_profile("work", store::ProfileKind::Subscription).unwrap();
+            let err = add_api_key_profile_with("WORK", "sk-ant-x", |_, _| {
+                panic!("keychain must not be touched when the name is taken");
+            })
+            .unwrap_err();
+            match err {
+                CcmError::AlreadyExists { name } => assert_eq!(name, "WORK"),
+                other => panic!("expected AlreadyExists, got {other:?}"),
+            }
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn tampered_stored_name_surfaces_as_typed_invalid_name() {
+        with_ccm_home(|| {
+            let tampered = b"{\"profiles\":[{\"name\":\"../../escape\",\"kind\":\"subscription\"}],\"active\":null,\"failoverEnabled\":true,\"failoverOrder\":[]}\n";
+            std::fs::write(store::config_path(), tampered).unwrap();
+            let err = remove_profile_with("../../escape", |_| {
+                panic!("keychain must not be touched for a tampered/invalid stored name");
+            })
+            .unwrap_err();
+            assert!(matches!(err, CcmError::InvalidName { .. }));
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn keychain_failure_surfaces_as_typed_keychain_error_carrying_no_key_material() {
+        with_ccm_home(|| {
+            let err = add_api_key_profile_with("bot", "sk-ant-supersecret", |_, _| {
+                Err(CcmError::Keychain {
+                    message: "Failed to save API key for profile \"bot\" to macOS Keychain."
+                        .to_string(),
+                })
+            })
+            .unwrap_err();
+            assert!(matches!(err, CcmError::Keychain { .. }));
+            assert!(!format!("{err:?}").contains("sk-ant-supersecret"));
+            assert!(!err.to_string().contains("sk-ant-supersecret"));
+            // Rollback invariant survives the retype.
+            assert!(store::get_profile("bot").unwrap().is_none());
+            assert!(!store::profile_dir("bot").unwrap().exists());
+        });
+    }
+
+    #[test]
+    #[serial]
+    fn get_usage_view_carries_reset_at_ms_none_for_a_fresh_profile() {
+        with_ccm_home(|| {
+            store::add_profile("fresh", store::ProfileKind::Subscription).unwrap();
+            let views = get_usage().unwrap();
+            assert_eq!(views.len(), 1);
+            assert_eq!(views[0].profile, "fresh");
+            assert_eq!(views[0].kind, "subscription");
+            assert_eq!(views[0].total_tokens, 0);
+            assert_eq!(views[0].reset_at_ms, None);
         });
     }
 }

@@ -69,8 +69,11 @@ pub enum StoreError {
 }
 
 impl StoreError {
-    /// Chuỗi sạch cho frontend — không path, không key, không raw OS error.
-    /// `CorruptConfig` trả sentinel để UI hiện banner "config hỏng".
+    /// Chuỗi sạch cho tầng UI — không path, không key, không raw OS error.
+    /// KHÔNG có sentinel máy-đọc nào ở đây: `CorruptConfig` từng trả chuỗi
+    /// "CONFIG_CORRUPT" cho bản Tauri, và chuỗi đó rò thẳng ra màn hình
+    /// người dùng. Nay việc phân loại lỗi là của `api::CcmError` (enum có
+    /// kiểu, Swift switch trên variant), còn hàm này chỉ sinh câu chữ.
     pub fn message(&self) -> String {
         match self {
             StoreError::InvalidName(n) => {
@@ -78,7 +81,9 @@ impl StoreError {
             }
             StoreError::NotFound(n) => format!("Profile \"{n}\" not found."),
             StoreError::AlreadyExists(n) => format!("Profile \"{n}\" already exists."),
-            StoreError::CorruptConfig => "CONFIG_CORRUPT".to_string(),
+            StoreError::CorruptConfig => {
+                "The ccm config file is not valid JSON and could not be read.".to_string()
+            }
             StoreError::Io(_) => {
                 "A file operation failed. Check that ~/.ccm is readable and writable.".to_string()
             }
@@ -320,7 +325,10 @@ mod tests {
         let err = load_config().unwrap_err();
         env::remove_var("CCM_HOME");
         assert!(matches!(err, StoreError::CorruptConfig));
-        assert_eq!(err.message(), "CONFIG_CORRUPT");
+        assert!(
+            !err.message().contains("CONFIG_CORRUPT"),
+            "the machine-readable sentinel must never reach user-facing copy"
+        );
     }
 
     #[test]
