@@ -7,6 +7,16 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Updated the current-version status label from “Up to date” to the more
+  compact “Latest” in both the sidebar and Settings.
+
+### Fixed
+
+- Prevented long `ord sessions` entries from wrapping and duplicating the
+  interactive picker while moving with the arrow keys.
+
 ## [0.1.4] - 2026-07-23
 
 ### Added

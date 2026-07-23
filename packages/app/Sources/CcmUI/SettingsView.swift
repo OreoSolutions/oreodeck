@@ -183,7 +183,7 @@ public struct SettingsView: View {
                             if let update = model.availableUpdate {
                                 StatusPill(text: "v\(update.version) available", color: .orange)
                             } else {
-                                StatusPill(text: "Up to date", color: OreoTheme.cyan)
+                                StatusPill(text: "Latest", color: OreoTheme.cyan)
                             }
                         }
                         Text("OreoDeck checks GitHub Releases and uses the CLI updater to download and verify the release checksum before installation.")

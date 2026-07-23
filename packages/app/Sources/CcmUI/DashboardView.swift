@@ -150,7 +150,7 @@ public struct DashboardView: View {
     private var updateStatusText: String {
         if model.checkingForUpdate { return "Checking…" }
         if let update = model.availableUpdate { return "v\(update.version) available" }
-        return "Up to date"
+        return "Latest"
     }
 
     private var updateStatusIcon: String {
