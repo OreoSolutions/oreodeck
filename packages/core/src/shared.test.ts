@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { lstat, mkdir, mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addProfile, loadConfig } from "./profile-store";
+import { addProfile, loadConfig, updateConfig } from "./profile-store";
 import { getSharedResources, setSharedResources } from "./shared";
 import { profileDir } from "./paths";
 
@@ -15,7 +15,6 @@ beforeEach(async () => {
   process.env.CCM_HOME = join(root, "ccm");
   process.env.CCM_GLOBAL_CLAUDE_HOME = globalRoot;
   await mkdir(join(globalRoot, "skills"), { recursive: true });
-  await writeFile(join(globalRoot, "CLAUDE.md"), "global instructions");
   await addProfile("work", "subscription");
 });
 
@@ -26,11 +25,12 @@ afterEach(async () => {
 });
 
 test("configures selected global resources as per-profile symlinks", async () => {
-  await setSharedResources("work", ["skills", "CLAUDE.md"]);
+  await mkdir(join(globalRoot, "plugins"), { recursive: true });
+  await setSharedResources("work", ["skills", "plugins"]);
   expect((await lstat(join(profileDir("work"), "skills"))).isSymbolicLink()).toBe(true);
-  expect(await readlink(join(profileDir("work"), "CLAUDE.md"))).toBe(join(globalRoot, "CLAUDE.md"));
-  expect(await getSharedResources("WORK")).toEqual(["skills", "CLAUDE.md"]);
-  expect((await loadConfig()).profiles[0]?.sharedResources).toEqual(["skills", "CLAUDE.md"]);
+  expect(await readlink(join(profileDir("work"), "plugins"))).toBe(join(globalRoot, "plugins"));
+  expect(await getSharedResources("WORK")).toEqual(["skills", "plugins"]);
+  expect((await loadConfig()).profiles[0]?.sharedResources).toEqual(["skills", "plugins"]);
 });
 
 test("clearing removes only ccm-managed symlinks", async () => {
@@ -58,6 +58,23 @@ test("force backs up a real profile resource before replacing it with a symlink"
 
 test("rejects resources outside the security allowlist", async () => {
   await expect(setSharedResources("work", ["projects"])).rejects.toThrow("Unsupported shared resource");
+  await expect(setSharedResources("work", ["settings.json"])).rejects.toThrow("Unsupported shared resource");
+  await expect(setSharedResources("work", ["CLAUDE.md"])).rejects.toThrow("Unsupported shared resource");
+});
+
+test("removes legacy shared resources while accepting only the narrowed allowlist", async () => {
+  const source = join(globalRoot, "CLAUDE.md");
+  const destination = join(profileDir("work"), "CLAUDE.md");
+  await writeFile(source, "legacy global instructions");
+  await symlink(source, destination);
+  await updateConfig((config) => {
+    config.profiles[0]!.sharedResources = ["CLAUDE.md", "skills"];
+  });
+
+  await setSharedResources("work", ["skills"]);
+
+  await expect(lstat(destination)).rejects.toThrow();
+  expect(await getSharedResources("work")).toEqual(["skills"]);
 });
 
 test("shares plugin activation and MCP config without replacing isolated config files", async () => {

@@ -5,7 +5,11 @@ import { loadConfig, updateConfig } from "./profile-store";
 import { syncSharedConfiguration } from "./shared-config";
 
 export const SHARED_RESOURCES = [
-  "CLAUDE.md", "settings.json", "statusline.sh", "agents", "commands", "skills", "plugins", "mcp",
+  "mcp", "skills", "plugins",
+] as const;
+
+const LEGACY_SHARED_RESOURCES = [
+  "CLAUDE.md", "settings.json", "statusline.sh", "agents", "commands", ...SHARED_RESOURCES,
 ] as const;
 
 export type SharedResource = typeof SHARED_RESOURCES[number];
@@ -17,6 +21,17 @@ function validateResources(resources: string[]): SharedResource[] {
       throw new Error(`Unsupported shared resource "${resource}". Allowed: ${SHARED_RESOURCES.join(", ")}.`);
     }
     if (!unique.includes(resource as SharedResource)) unique.push(resource as SharedResource);
+  }
+  return unique;
+}
+
+function validateStoredResources(resources: string[]): string[] {
+  const unique: string[] = [];
+  for (const resource of resources) {
+    if (!(LEGACY_SHARED_RESOURCES as readonly string[]).includes(resource)) {
+      throw new Error(`Unsupported stored shared resource "${resource}".`);
+    }
+    if (!unique.includes(resource)) unique.push(resource);
   }
   return unique;
 }
@@ -52,7 +67,7 @@ export async function setSharedResources(
     await updateConfig(async (config) => {
     const profile = config.profiles.find((p) => p.name.toLowerCase() === profileName.toLowerCase());
     if (!profile) throw new Error(`Profile "${profileName}" not found.`);
-    const old = validateResources(profile.sharedResources ?? []);
+    const old = validateStoredResources(profile.sharedResources ?? []);
     const globalRoot = globalClaudeDir();
       for (const resource of resources.filter((r) => !old.includes(r) && r !== "mcp")) {
         const source = join(globalRoot, resource);
@@ -72,7 +87,9 @@ export async function setSharedResources(
         await symlink(source, destination);
         created.push({ destination });
       }
-      for (const resource of old.filter((r) => !resources.includes(r) && r !== "mcp")) {
+      for (const resource of old.filter(
+        (r) => !(resources as readonly string[]).includes(r) && r !== "mcp",
+      )) {
         const source = join(globalRoot, resource);
         const destination = join(profileDir(profile.name), resource);
         if (!(await exists(destination))) continue;

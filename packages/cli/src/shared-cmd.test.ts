@@ -44,24 +44,27 @@ test("shared set rejects sensitive resources", async () => {
   const result = await run("shared", "set", "work", "projects");
   expect(result.code).toBe(1);
   expect(result.stderr).toContain("Unsupported shared resource");
+  const settings = await run("shared", "set", "work", "settings.json");
+  expect(settings.code).toBe(1);
+  expect(settings.stderr).toContain("Allowed: mcp, skills, plugins");
 });
 
 test("interactive choices disable existing local paths and missing global sources", async () => {
-  await writeFile(join(root, "global", "settings.json"), "{}");
-  await writeFile(join(root, "ccm", "profiles", "work", "settings.json"), "{}");
+  await mkdir(join(root, "global", "plugins"));
+  await mkdir(join(root, "ccm", "profiles", "work", "plugins"));
   const availability = await interactiveAvailability("work");
-  expect(availability.disabled.has("settings.json")).toBe(false);
-  expect(availability.conflicts.has("settings.json")).toBe(true);
-  expect(availability.annotations.get("settings.json")).toContain("confirmation and backup");
-  expect(availability.disabled.has("CLAUDE.md")).toBe(true);
+  expect(availability.disabled.has("plugins")).toBe(false);
+  expect(availability.conflicts.has("plugins")).toBe(true);
+  expect(availability.annotations.get("plugins")).toContain("confirmation and backup");
   expect(availability.disabled.has("skills")).toBe(false);
 });
 
 test("shared set --force --yes backs up and replaces a local resource", async () => {
-  await writeFile(join(root, "global", "settings.json"), "global");
-  const local = join(root, "ccm", "profiles", "work", "settings.json");
-  await writeFile(local, "local");
-  const result = await run("shared", "set", "work", "settings.json", "--force", "--yes");
+  await mkdir(join(root, "global", "plugins"));
+  const local = join(root, "ccm", "profiles", "work", "plugins");
+  await mkdir(local);
+  await writeFile(join(local, "local.txt"), "local");
+  const result = await run("shared", "set", "work", "plugins", "--force", "--yes");
   expect(result.code).toBe(0);
   expect(result.stdout).toContain("backed up at");
 });

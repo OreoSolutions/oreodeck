@@ -134,7 +134,9 @@ pub fn profiles_dir() -> PathBuf {
     ccm_home().join("profiles")
 }
 
-pub const SHARED_RESOURCES: &[&str] = &[
+pub const SHARED_RESOURCES: &[&str] = &["mcp", "skills", "plugins"];
+
+const LEGACY_SHARED_RESOURCES: &[&str] = &[
     "CLAUDE.md",
     "settings.json",
     "statusline.sh",
@@ -189,6 +191,21 @@ fn validate_shared_resources(resources: &[String]) -> Result<Vec<String>, StoreE
     Ok(unique)
 }
 
+fn validate_stored_shared_resources(resources: &[String]) -> Result<Vec<String>, StoreError> {
+    let mut unique = Vec::new();
+    for resource in resources {
+        if !LEGACY_SHARED_RESOURCES.contains(&resource.as_str()) {
+            return Err(StoreError::SharedResource(format!(
+                "Unsupported stored shared resource \"{resource}\"."
+            )));
+        }
+        if !unique.contains(resource) {
+            unique.push(resource.clone());
+        }
+    }
+    Ok(unique)
+}
+
 fn is_expected_link(destination: &Path, source: &Path) -> Result<bool, StoreError> {
     let metadata = fs::symlink_metadata(destination).map_err(|e| StoreError::Io(e.to_string()))?;
     if !metadata.file_type().is_symlink() {
@@ -227,8 +244,9 @@ fn set_shared_resources_impl(
         .ok_or_else(|| StoreError::NotFound(name.to_string()))?;
     let profile_name = config.profiles[profile_index].name.clone();
     assert_valid_name(&profile_name)?;
-    let old =
-        validate_shared_resources(&profile_shared_resources(&config.profiles[profile_index]))?;
+    let old = validate_stored_shared_resources(&profile_shared_resources(
+        &config.profiles[profile_index],
+    ))?;
     let global = global_claude_dir();
     let profile_root = profile_dir(&profile_name)?;
     let mut created: Vec<PathBuf> = Vec::new();
@@ -736,6 +754,10 @@ mod tests {
 
         assert!(matches!(
             set_shared_resources("work", &["projects".to_string()]),
+            Err(StoreError::SharedResource(_))
+        ));
+        assert!(matches!(
+            set_shared_resources("work", &["settings.json".to_string()]),
             Err(StoreError::SharedResource(_))
         ));
         assert!(matches!(
