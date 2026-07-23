@@ -20,7 +20,8 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   retaining a cleanup path for legacy shared-resource metadata.
 - Release packaging now verifies both versioned and stable archive checksums.
 - Release automation now rolls `Unreleased` into versioned GitHub release notes
-  and skips test, lint, and format commands.
+  automatically bumps all package/app versions, and skips test, lint, and
+  format commands.
 - The native installer now uses English exclusively and no longer prompts for
   a language.
 
