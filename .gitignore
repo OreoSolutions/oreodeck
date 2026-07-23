@@ -1,5 +1,6 @@
 .superpowers/
 .codegraph/
+docs/
 node_modules/
 dist/
 *.log

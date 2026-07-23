@@ -296,18 +296,6 @@ bun run lint
 bun run fmt:check
 ```
 
-Release builds are Developer ID signed and notarized through the scripts in
-`scripts/`. Never remove quarantine to bypass a failed release verification.
-
-Create and verify a local release:
-
-```bash
-./scripts/build.sh
-CODESIGN_ID='REDACTED' ./scripts/sign.sh
-NOTARY_PROFILE='oreodeck-notary' ./scripts/notarize.sh
-./scripts/package-release.sh
-```
-
 The CLI checks GitHub Releases at most once per day on interactive commands and
 asks before installing. Use `ord update --check` for an explicit check or
 `ord update` to download, verify and install an available release. Set

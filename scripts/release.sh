@@ -7,7 +7,9 @@ VERSION="${1:-}"
 [[ "$(git branch --show-current)" == "main" ]] || { echo "Release must run from main." >&2; exit 1; }
 [[ -z "$(git status --porcelain)" ]] || { echo "Working tree must be clean." >&2; exit 1; }
 git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null && { echo "Tag v$VERSION already exists." >&2; exit 1; }
-[[ -f "docs/releases/v$VERSION.md" ]] || { echo "Missing docs/releases/v$VERSION.md." >&2; exit 1; }
+NOTES_FILE="docs/releases/v$VERSION.md"
+[[ -f "$NOTES_FILE" ]] || NOTES_FILE="CHANGELOG.md"
+[[ -f "$NOTES_FILE" ]] || { echo "Missing release notes and CHANGELOG.md." >&2; exit 1; }
 CURRENT="$(bun -e 'console.log((await Bun.file("package.json").json()).version)')"
 [[ "$CURRENT" == "$VERSION" ]] || { echo "package.json version $CURRENT does not match $VERSION." >&2; exit 1; }
 bun install --frozen-lockfile
@@ -31,7 +33,7 @@ if [[ "${2:-}" == "--publish" ]]; then
     "dist/oreodeck-$VERSION-macos-$ARCH.zip.sha256" \
     "dist/oreodeck-macos-$ARCH.zip" \
     "dist/oreodeck-macos-$ARCH.zip.sha256" \
-    --title "OreoDeck $VERSION" --notes-file "docs/releases/v$VERSION.md"
+    --title "OreoDeck $VERSION" --notes-file "$NOTES_FILE"
 else
   echo "Artifacts ready. Re-run with --publish after reviewing them."
 fi
