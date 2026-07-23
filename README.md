@@ -37,7 +37,7 @@ same functionality.
 - Native SwiftUI dashboard and menu-bar app.
 - Terminal integrations for Terminal.app, Ghostty, iTerm2, WezTerm, Alacritty,
   Kitty, Warp, Hyper, Tabby, Rio, and Wave Terminal.
-- Bilingual English/Vietnamese installer with English as the default.
+- English-language native installer with interactive CLI, UI, and shell setup.
 
 ## Requirements
 
@@ -65,9 +65,9 @@ archive and run:
 ./install.sh
 ```
 
-The installer asks for a language first. Press Enter to use English, or choose
-Vietnamese. It then asks whether to install the optional desktop app and
-whether the `claude` command should automatically route through OreoDeck.
+The installer runs in English and asks whether to install the optional desktop
+app and whether the `claude` command should automatically route through
+OreoDeck.
 
 Finder users can double-click `install.command`; it invokes the same installer
 and keeps the window open so the result remains visible.

@@ -23,7 +23,7 @@ OreoDeck 支持并行使用多个 Claude 账户、为不同终端标签页固定
 - 可配置的自动故障转移顺序。
 - 原生 SwiftUI 仪表板和菜单栏应用。
 - 支持 Terminal.app、Ghostty、iTerm2、WezTerm、Alacritty、Kitty、Warp、Hyper、Tabby、Rio 和 Wave Terminal。
-- 英语/越南语安装程序，默认英语。
+- 安装程序全程使用英语。
 
 ## 系统要求
 
@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/OreoSolutions/oreodeck/main/install
 ./install.sh
 ```
 
-安装器会询问语言、是否安装 UI，以及是否让 `claude` 命令自动通过 OreoDeck。Finder 用户可以双击 `install.command`。
+安装器使用英语，并会询问是否安装 UI，以及是否让 `claude` 命令自动通过 OreoDeck。Finder 用户可以双击 `install.command`。
 
 安装位置：
 

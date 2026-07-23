@@ -23,7 +23,7 @@ OreoDeck cho phép chạy nhiều tài khoản Claude song song, gắn profile t
 - Thứ tự failover tùy chỉnh.
 - Dashboard SwiftUI native và menu-bar app.
 - Tích hợp Terminal.app, Ghostty, iTerm2, WezTerm, Alacritty, Kitty, Warp, Hyper, Tabby, Rio và Wave Terminal.
-- Installer tiếng Anh/Việt, mặc định tiếng Anh.
+- Installer sử dụng tiếng Anh cho toàn bộ quá trình cài đặt.
 
 ## Yêu cầu
 
@@ -44,7 +44,7 @@ Installer tải asset đúng kiến trúc, xác minh SHA-256 rồi chạy trình
 ./install.sh
 ```
 
-Installer hỏi ngôn ngữ, có cài UI hay không và có route lệnh `claude` qua OreoDeck hay không. Người dùng Finder có thể mở `install.command`.
+Installer sử dụng tiếng Anh, hỏi có cài UI hay không và có route lệnh `claude` qua OreoDeck hay không. Người dùng Finder có thể mở `install.command`.
 
 Vị trí cài đặt:
 
