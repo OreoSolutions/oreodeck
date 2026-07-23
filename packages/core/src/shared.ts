@@ -1,8 +1,9 @@
 import { dirname, join, resolve } from "node:path";
-import { lstat, mkdir, readlink, rename, symlink, unlink } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, readlink, rename, symlink, unlink } from "node:fs/promises";
 import { globalClaudeDir, profileDir } from "./paths";
 import { loadConfig, updateConfig } from "./profile-store";
 import { syncSharedConfiguration } from "./shared-config";
+import { ensureGlobalBuiltinOreoDeckSkill, isManagedOreoDeckSkill } from "./builtin-skills";
 
 export const SHARED_RESOURCES = [
   "mcp", "skills", "plugins", "statusline.sh",
@@ -50,6 +51,18 @@ async function isExpectedLink(destination: string, source: string): Promise<bool
   return resolve(dirname(destination), target) === source;
 }
 
+async function containsOnlyManagedOreoDeckSkill(path: string): Promise<boolean> {
+  const info = await lstat(path);
+  if (!info.isDirectory() || info.isSymbolicLink()) return false;
+  const entries = await readdir(path);
+  if (entries.length !== 1 || entries[0] !== "oreodeck") return false;
+  try {
+    return isManagedOreoDeckSkill(await readFile(join(path, "oreodeck", "SKILL.md"), "utf8"));
+  } catch {
+    return false;
+  }
+}
+
 /** Sets the complete safe-resource list for one profile. Existing real files
  * are never overwritten; only links pointing to the expected global source
  * are removed. Filesystem changes are rolled back if config persistence fails. */
@@ -72,10 +85,13 @@ export async function setSharedResources(
       for (const resource of resources.filter((r) => !old.includes(r) && r !== "mcp")) {
         const source = join(globalRoot, resource);
         const destination = join(profileDir(profile.name), resource);
+        if (resource === "skills") await ensureGlobalBuiltinOreoDeckSkill();
         if (!(await exists(source))) throw new Error(`Global Claude resource does not exist: ~/.claude/${resource}`);
         if (await exists(destination)) {
           if (await isExpectedLink(destination, source)) continue;
-          if (!options.force) {
+          const isManagedSkillsDirectory = resource === "skills"
+            && await containsOnlyManagedOreoDeckSkill(destination);
+          if (!options.force && !isManagedSkillsDirectory) {
             throw new Error(`Profile resource already exists and will not be overwritten: ${destination}`);
           }
           backupRoot ??= join(profileDir(profile.name), ".oreodeck-backups", "shared", `${Date.now()}-${process.pid}`);

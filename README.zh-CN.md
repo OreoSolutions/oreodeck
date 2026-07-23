@@ -129,6 +129,12 @@ ord shared set work skills plugins --force --yes
 
 ## 用量和故障转移
 
+使用 `ord identity`、`ord identity -P personal` 或 `ord identity --json`
+查看当前目录解析出的配置档案与安全的 Claude 帐户信息。通过 OreoDeck
+启动的每个 Claude 会话也会获得 `/oreodeck` skill，用于显示相同的配置档案、
+帐户、模型、MCP 和设置摘要。OAuth token、API 密钥和帐户 UUID 永远不会显示；
+实时 session ID 与运行状态仍请使用 Claude 内置的 `/status`。
+
 ```bash
 ord status
 ord failover order work personal automation

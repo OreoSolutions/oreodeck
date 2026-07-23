@@ -2,6 +2,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { assertValidName, configLockPath, configPath, profileDir } from "./paths";
 import { readJson, withDirectoryLock, writeJsonAtomic } from "./atomic";
 import { deleteApiKey } from "./keychain";
+import { ensureBuiltinOreoDeckSkill } from "./builtin-skills";
 
 export type ProfileKind = "subscription" | "api-key";
 
@@ -18,6 +19,14 @@ export interface Config {
   failoverOrder: string[];
   terminal?: "terminal" | "ghostty" | "iterm2" | "wezterm" | "alacritty" | "kitty" |
     "warp" | "hyper" | "tabby" | "rio" | "wave";
+}
+
+export type ProfileSelectionSource = "explicit" | "project" | "tab" | "global";
+
+export interface ResolvedProfileSelection {
+  name: string;
+  source: ProfileSelectionSource;
+  projectConfigPath?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -103,6 +112,7 @@ export async function addProfile(name: string, kind: ProfileKind): Promise<void>
   await updateConfig(async (c) => {
     if (findProfile(c.profiles, name)) throw new Error(`Profile "${name}" already exists.`);
     await mkdir(profileDir(name), { recursive: true });
+    await ensureBuiltinOreoDeckSkill(name);
     c.profiles.push({ name, kind });
     c.failoverOrder.push(name);
     c.active ??= name;
@@ -148,19 +158,34 @@ export async function setActive(name: string): Promise<void> {
 }
 
 /** Chọn profile: override (-P) > project .oreodeck > tab > active toàn cục. */
-export async function resolveProfileName(override?: string, cwd = process.cwd()): Promise<string> {
-  const projectProfile = override ? null : (await import("./project-config")).findProjectProfile(cwd);
-  const requested = override || (await projectProfile)?.profile || process.env.OREODECK_PROFILE?.trim();
+export async function resolveProfileSelection(
+  override?: string,
+  cwd = process.cwd(),
+): Promise<ResolvedProfileSelection> {
+  const projectProfilePromise = override
+    ? Promise.resolve(null)
+    : (await import("./project-config")).findProjectProfile(cwd);
+  const projectProfile = await projectProfilePromise;
+  const tabProfile = process.env.OREODECK_PROFILE?.trim();
+  const requested = override || projectProfile?.profile || tabProfile;
   if (requested) {
     const profile = await getProfile(requested);
     if (!profile) {
       throw new Error(`Profile "${requested}" not found. Run \`oreodeck list\` to see profiles.`);
     }
-    return profile.name;
+    return {
+      name: profile.name,
+      source: override ? "explicit" : projectProfile ? "project" : "tab",
+      ...(projectProfile ? { projectConfigPath: projectProfile.path } : {}),
+    };
   }
   const c = await loadConfig();
   if (!c.active) {
     throw new Error("No active profile. Run `oreodeck add <name>` to create one.");
   }
-  return c.active;
+  return { name: c.active, source: "global" };
+}
+
+export async function resolveProfileName(override?: string, cwd = process.cwd()): Promise<string> {
+  return (await resolveProfileSelection(override, cwd)).name;
 }

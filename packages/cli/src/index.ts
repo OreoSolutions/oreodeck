@@ -17,10 +17,25 @@ import { sharedClearCommand, sharedSetCommand, sharedShowCommand, sharedChoices 
 import { uninstallCommand } from "./commands/uninstall";
 import { uiInstallCommand, uiOpenCommand, uiRemoveCommand } from "./commands/ui";
 import { sessionsCommand } from "./commands/sessions";
+import { identityCommand } from "./commands/identity";
 import { maybePromptForUpdate, updateCommand } from "./update";
 import { OREODECK_VERSION } from "./version";
+import { ensureBuiltinSkillsForProfiles, loadConfig } from "@ccm/core";
 
 const program = new Command();
+
+// Keep the managed Claude skill present for profiles created by older
+// OreoDeck versions, even before the next `ord run`.
+async function syncBuiltinSkills(): Promise<void> {
+  try {
+    await ensureBuiltinSkillsForProfiles((await loadConfig()).profiles);
+  } catch {
+    // Config validation and actionable errors remain the responsibility of
+    // the command being invoked; a background migration must not break help.
+  }
+}
+
+await syncBuiltinSkills();
 
 program
   .name("oreodeck")
@@ -83,6 +98,14 @@ program
   .command("status")
   .description("Show token usage per profile for the current 5-hour window")
   .action(statusCommand);
+
+program
+  .command("identity")
+  .alias("whoami")
+  .description("Show the active OreoDeck profile and Claude account identity")
+  .option("-P, --profile <name>", "profile to inspect instead of the resolved profile")
+  .option("--json", "print safe machine-readable JSON")
+  .action(identityCommand);
 
 const failover = program.command("failover").description("Configure automatic failover");
 failover.command("on").description("Enable failover").action(failoverOnCommand);

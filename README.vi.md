@@ -129,6 +129,13 @@ Khi force, tài nguyên cũ được backup trong `.oreodeck-backups/shared`. St
 
 ## Usage và failover
 
+Kiểm tra profile được chọn cho thư mục hiện tại và thông tin tài khoản Claude
+an toàn bằng `ord identity`, `ord identity -P personal` hoặc
+`ord identity --json`. Mỗi phiên Claude mở qua OreoDeck cũng có skill
+`/oreodeck` để hiện cùng phần tổng quan về profile, tài khoản, model, MCP và
+settings. Token OAuth, API key và UUID tài khoản không bao giờ được hiển thị;
+dùng `/status` có sẵn của Claude để xem session ID và trạng thái runtime.
+
 ```bash
 ord status
 ord failover order work personal automation

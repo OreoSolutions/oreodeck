@@ -229,6 +229,21 @@ Sharing remains selective:
 
 ## Usage and failover
 
+Inspect the profile resolved for the current directory and its safe Claude
+account identity fields:
+
+```bash
+ord identity
+ord identity -P personal
+ord identity --json
+```
+
+Every Claude session launched through OreoDeck also receives the managed
+`/oreodeck` skill. Invoke it inside Claude to show the same profile, account,
+model, MCP and settings summary. OAuth tokens, API keys and account UUIDs are
+never included. Claude's built-in `/status` remains the source for live session
+ID, connection health and runtime model details.
+
 View the current five-hour usage window:
 
 ```bash

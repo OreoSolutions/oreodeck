@@ -1,0 +1,4 @@
+interface:
+  display_name: "OreoDeck"
+  short_description: "Show the active OreoDeck and Claude account identity"
+  default_prompt: "Show the current OreoDeck profile and Claude account status."

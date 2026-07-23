@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { addProfile, resolveProfileName } from "./profile-store";
+import { addProfile, resolveProfileName, resolveProfileSelection } from "./profile-store";
 import { findProjectProfile, setProjectProfile } from "./project-config";
 
 let root: string;
@@ -40,6 +40,18 @@ test("profile precedence is explicit then project then tab then global", async (
   expect(await resolveProfileName(undefined, root)).toBe("work");
   delete process.env.OREODECK_PROFILE;
   expect(await resolveProfileName(undefined, root)).toBe("work");
+});
+
+test("reports the profile selection source and project config path", async () => {
+  const project = join(root, "repo");
+  await mkdir(project);
+  const path = await setProjectProfile("personal", project);
+  expect(await resolveProfileSelection(undefined, project)).toEqual({
+    name: "personal",
+    source: "project",
+    projectConfigPath: path,
+  });
+  expect(await resolveProfileSelection("work", project)).toEqual({ name: "work", source: "explicit" });
 });
 
 test("writes canonical profile casing to .oreodeck/config.json", async () => {

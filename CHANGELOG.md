@@ -7,6 +7,14 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added `ord identity` (`ord whoami`) with safe text and JSON summaries of the
+  resolved OreoDeck profile and Claude account identity.
+- Added a managed `/oreodeck` Claude skill to every profile launched through
+  OreoDeck, with automatic installation for new and existing profiles, without
+  exposing credentials or overwriting a user-owned skill.
+
 ## [0.1.6] - 2026-07-23
 
 ### Fixed

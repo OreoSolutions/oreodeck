@@ -42,13 +42,16 @@ test("clearing removes only ccm-managed symlinks", async () => {
 });
 
 test("never overwrites a real profile resource", async () => {
+  await rm(join(profileDir("work"), "skills"), { recursive: true });
   await mkdir(join(profileDir("work"), "skills"));
+  await writeFile(join(profileDir("work"), "skills", "custom.md"), "user-owned");
   await expect(setSharedResources("work", ["skills"])).rejects.toThrow("will not be overwritten");
   expect((await lstat(join(profileDir("work"), "skills"))).isDirectory()).toBe(true);
 });
 
 test("force backs up a real profile resource before replacing it with a symlink", async () => {
   const local = join(profileDir("work"), "skills");
+  await rm(local, { recursive: true });
   await mkdir(local);
   await writeFile(join(local, "local.txt"), "keep me");
   const backup = await setSharedResources("work", ["skills"], { force: true });
