@@ -97,6 +97,10 @@ public struct DashboardView: View {
                             Image(systemName: updateStatusIcon)
                                 .foregroundStyle(updateStatusColor)
                             Text(updateStatusText)
+                            Spacer(minLength: 4)
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.tertiary)
                         }
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
@@ -108,6 +112,7 @@ public struct DashboardView: View {
                 }
                 .buttonStyle(.plain)
                 .focusable(false)
+                .accessibilityLabel("OreoDeck v\(model.currentVersion), \(updateStatusText). Open update settings")
                 .help("Open update settings")
 
                 HStack(spacing: 7) {

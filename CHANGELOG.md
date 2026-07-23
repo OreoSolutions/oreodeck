@@ -16,6 +16,11 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Install and uninstall now print the exact shell refresh command whenever
   they modify OreoDeck integration in `~/.zshrc`.
 
+### Changed
+
+- Made the sidebar update card easier to discover with a navigation indicator
+  and a complete accessibility label.
+
 ## [0.1.1] - 2026-07-23
 
 ### Added
