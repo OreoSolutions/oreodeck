@@ -7,6 +7,8 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-07-23
+
 ### Added
 
 - Added `ord identity` (`ord whoami`) with safe text and JSON summaries of the
@@ -155,7 +157,7 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   supported during the OreoDeck migration.
 - Legacy Keychain entries under `com.oreo.ccm` remain readable and removable.
 
-[Unreleased]: https://github.com/OreoSolutions/oreodeck/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/OreoSolutions/oreodeck/compare/v0.1.7...HEAD
 [0.1.0]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.0
 [0.1.1]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.1
 [0.1.2]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.2
@@ -163,3 +165,4 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 [0.1.4]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.4
 [0.1.5]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.5
 [0.1.6]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.6
+[0.1.7]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.7
