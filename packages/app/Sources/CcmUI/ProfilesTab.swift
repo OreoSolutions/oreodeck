@@ -42,8 +42,9 @@ public struct ProfilesTab: View {
                     color: .green
                 )
                 summaryCard(
-                    title: "5h usage",
-                    value: formatTokens(model.rows.reduce(0) { $0 + $1.totalTokens }),
+                    title: "Active 5h usage",
+                    value: model.rows.first(where: \.active)?.planFiveHourPercent
+                        .map { "\(Int($0.rounded()))%" } ?? "—",
                     icon: "chart.bar.fill",
                     color: .purple
                 )
@@ -79,14 +80,20 @@ public struct ProfilesTab: View {
                     TableColumn("Kind") { row in
                         Text(row.kind == "api-key" ? "API key" : "Subscription")
                     }
-                    TableColumn("Tokens (5h)") { row in
-                        Text(formatTokens(row.totalTokens)).monospacedDigit()
+                    TableColumn("Usage") { row in
+                        Text(row.kind == "subscription"
+                            ? row.planFiveHourPercent.map { "\(Int($0.rounded()))% (5h)" } ?? "—"
+                            : "\(formatTokens(row.totalTokens)) tokens")
+                            .monospacedDigit()
                     }
                     TableColumn("Cost") { row in
                         Text(formatCost(kind: row.kind, costUsd: row.costUsd)).monospacedDigit()
                     }
                     TableColumn("Resets in") { row in
-                        Text(formatCountdown(resetAtMs: row.resetAtMs, nowMs: model.nowMs))
+                        Text(formatCountdown(
+                            resetAtMs: row.kind == "subscription" ? row.planFiveHourResetAtMs : nil,
+                            nowMs: model.nowMs
+                        ))
                             .monospacedDigit()
                     }
                 }

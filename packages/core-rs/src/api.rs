@@ -78,6 +78,12 @@ pub struct ProfileUsageView {
     pub cost_usd: f64,
     /// None ⇒ no billable entry in the 5h window ⇒ UI shows "—".
     pub reset_at_ms: Option<i64>,
+    /// Authoritative account-level plan usage cached by Claude Code.
+    pub plan_five_hour_percent: Option<f64>,
+    pub plan_five_hour_reset_at_ms: Option<i64>,
+    pub plan_weekly_percent: Option<f64>,
+    pub plan_weekly_reset_at_ms: Option<i64>,
+    pub plan_usage_fetched_at_ms: Option<i64>,
 }
 
 #[derive(Debug, uniffi::Record)]
@@ -148,6 +154,11 @@ pub fn get_usage() -> Result<Vec<ProfileUsageView>, CcmError> {
         .into_iter()
         .map(|p| {
             let u = usage::read_profile_usage(&p.name, now);
+            let plan = if matches!(p.kind, store::ProfileKind::Subscription) {
+                usage::read_claude_plan_usage(&p.name)
+            } else {
+                None
+            };
             ProfileUsageView {
                 profile: p.name,
                 kind: kind_str(p.kind),
@@ -159,6 +170,19 @@ pub fn get_usage() -> Result<Vec<ProfileUsageView>, CcmError> {
                 total_tokens: u.total_tokens,
                 cost_usd: u.cost_usd,
                 reset_at_ms: u.reset_at,
+                plan_five_hour_percent: plan
+                    .as_ref()
+                    .and_then(|value| value.five_hour.as_ref().map(|window| window.utilization)),
+                plan_five_hour_reset_at_ms: plan
+                    .as_ref()
+                    .and_then(|value| value.five_hour.as_ref().and_then(|window| window.reset_at)),
+                plan_weekly_percent: plan
+                    .as_ref()
+                    .and_then(|value| value.seven_day.as_ref().map(|window| window.utilization)),
+                plan_weekly_reset_at_ms: plan
+                    .as_ref()
+                    .and_then(|value| value.seven_day.as_ref().and_then(|window| window.reset_at)),
+                plan_usage_fetched_at_ms: plan.as_ref().map(|value| value.fetched_at),
             }
         })
         .collect())

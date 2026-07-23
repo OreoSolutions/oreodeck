@@ -41,6 +41,19 @@ pub struct ProfileUsage {
     pub reset_at: Option<i64>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlanWindow {
+    pub utilization: f64,
+    pub reset_at: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClaudePlanUsage {
+    pub fetched_at: i64,
+    pub five_hour: Option<PlanWindow>,
+    pub seven_day: Option<PlanWindow>,
+}
+
 struct Price {
     input: f64,
     output: f64,
@@ -102,6 +115,39 @@ fn num(v: Option<&Value>) -> i64 {
         Some(n) if n.is_finite() => n as i64,
         _ => 0,
     }
+}
+
+fn parse_plan_window(value: Option<&Value>) -> Option<PlanWindow> {
+    let object = value?.as_object()?;
+    let utilization = object.get("utilization")?.as_f64()?;
+    if !utilization.is_finite() {
+        return None;
+    }
+    let reset_at = object
+        .get("resets_at")
+        .and_then(Value::as_str)
+        .and_then(|raw| DateTime::parse_from_rfc3339(raw).ok())
+        .map(|date| date.timestamp_millis());
+    Some(PlanWindow {
+        utilization,
+        reset_at,
+    })
+}
+
+/// Account-level cache written by Claude Code for `/usage` and status-line
+/// `rate_limits`. It includes every Claude surface for this account, unlike
+/// local transcript aggregation. Only usage fields are deserialized here.
+pub fn read_claude_plan_usage(profile: &str) -> Option<ClaudePlanUsage> {
+    let state = fs::read_to_string(profile_dir(profile).ok()?.join(".claude.json")).ok()?;
+    let root: Value = serde_json::from_str(&state).ok()?;
+    let cached = root.get("cachedUsageUtilization")?.as_object()?;
+    let fetched_at = cached.get("fetchedAtMs")?.as_i64()?;
+    let utilization = cached.get("utilization")?.as_object()?;
+    Some(ClaudePlanUsage {
+        fetched_at,
+        five_hour: parse_plan_window(utilization.get("five_hour")),
+        seven_day: parse_plan_window(utilization.get("seven_day")),
+    })
 }
 
 pub fn parse_transcript_line(line: &str) -> Option<UsageEntry> {
@@ -394,6 +440,36 @@ mod tests {
         assert_eq!(u.entries, 0);
         assert_eq!(u.total_tokens, 0);
         assert_eq!(u.reset_at, None);
+    }
+
+    #[test]
+    #[serial]
+    fn reads_claude_account_usage_cache_with_exact_resets() {
+        let dir = tempfile::tempdir().unwrap();
+        env::set_var("CCM_HOME", dir.path());
+        crate::store::add_profile("work", crate::store::ProfileKind::Subscription).unwrap();
+        let state = crate::store::profile_dir("work")
+            .unwrap()
+            .join(".claude.json");
+        std::fs::write(
+            state,
+            r#"{"cachedUsageUtilization":{"fetchedAtMs":1784781109168,"accountUuid":"must-not-leak","utilization":{"five_hour":{"utilization":75,"resets_at":"2026-07-23T06:00:00Z"},"seven_day":{"utilization":52,"resets_at":"2026-07-28T19:00:00Z"}}}}"#,
+        )
+        .unwrap();
+
+        let usage = read_claude_plan_usage("work").unwrap();
+        env::remove_var("CCM_HOME");
+        assert_eq!(usage.fetched_at, 1_784_781_109_168);
+        assert_eq!(usage.five_hour.as_ref().unwrap().utilization, 75.0);
+        assert_eq!(
+            usage.five_hour.unwrap().reset_at,
+            Some(
+                DateTime::parse_from_rfc3339("2026-07-23T06:00:00Z")
+                    .unwrap()
+                    .timestamp_millis()
+            )
+        );
+        assert_eq!(usage.seven_day.unwrap().utilization, 52.0);
     }
 
     /// Regression: the transcript walker must use `DirEntry::file_type()`

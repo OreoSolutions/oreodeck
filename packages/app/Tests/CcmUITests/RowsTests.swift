@@ -16,11 +16,15 @@ import Testing
         ProfileUsageView(
             profile: "bot", kind: "api-key", inputTokens: 1, cacheWrite5mTokens: 2,
             cacheWrite1hTokens: 3, cacheReadTokens: 4, outputTokens: 5, totalTokens: 15,
-            costUsd: 1.5, resetAtMs: 42),
+            costUsd: 1.5, resetAtMs: 42, planFiveHourPercent: nil,
+            planFiveHourResetAtMs: nil, planWeeklyPercent: nil,
+            planWeeklyResetAtMs: nil, planUsageFetchedAtMs: nil),
         ProfileUsageView(
             profile: "work", kind: "subscription", inputTokens: 10, cacheWrite5mTokens: 0,
             cacheWrite1hTokens: 0, cacheReadTokens: 0, outputTokens: 0, totalTokens: 10,
-            costUsd: 0, resetAtMs: nil),
+            costUsd: 0, resetAtMs: nil, planFiveHourPercent: 75,
+            planFiveHourResetAtMs: 100, planWeeklyPercent: 52,
+            planWeeklyResetAtMs: 200, planUsageFetchedAtMs: 50),
     ]
 
     let rows = mergeRows(profiles: profiles, usage: usage)
@@ -29,6 +33,8 @@ import Testing
     #expect(rows[0].active)
     #expect(rows[0].totalTokens == 10)
     #expect(rows[0].resetAtMs == nil)
+    #expect(rows[0].planFiveHourPercent == 75)
+    #expect(rows[0].planWeeklyResetAtMs == 200)
     #expect(rows[1].totalTokens == 15)
     #expect(rows[1].costUsd == 1.5)
     #expect(rows[1].resetAtMs == 42)

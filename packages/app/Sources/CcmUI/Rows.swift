@@ -15,6 +15,11 @@ public struct ProfileRow: Identifiable, Equatable, Sendable {
     public var totalTokens: Int64
     public var costUsd: Double
     public var resetAtMs: Int64?
+    public var planFiveHourPercent: Double?
+    public var planFiveHourResetAtMs: Int64?
+    public var planWeeklyPercent: Double?
+    public var planWeeklyResetAtMs: Int64?
+    public var planUsageFetchedAtMs: Int64?
     public var sharedResources: [String]
 
     public var id: String { name }
@@ -23,7 +28,10 @@ public struct ProfileRow: Identifiable, Equatable, Sendable {
         name: String, kind: String, active: Bool, inputTokens: Int64 = 0,
         cacheWrite5mTokens: Int64 = 0, cacheWrite1hTokens: Int64 = 0, cacheReadTokens: Int64 = 0,
         outputTokens: Int64 = 0, totalTokens: Int64 = 0, costUsd: Double = 0,
-        resetAtMs: Int64? = nil, sharedResources: [String] = []
+        resetAtMs: Int64? = nil, planFiveHourPercent: Double? = nil,
+        planFiveHourResetAtMs: Int64? = nil, planWeeklyPercent: Double? = nil,
+        planWeeklyResetAtMs: Int64? = nil, planUsageFetchedAtMs: Int64? = nil,
+        sharedResources: [String] = []
     ) {
         self.name = name
         self.kind = kind
@@ -36,6 +44,11 @@ public struct ProfileRow: Identifiable, Equatable, Sendable {
         self.totalTokens = totalTokens
         self.costUsd = costUsd
         self.resetAtMs = resetAtMs
+        self.planFiveHourPercent = planFiveHourPercent
+        self.planFiveHourResetAtMs = planFiveHourResetAtMs
+        self.planWeeklyPercent = planWeeklyPercent
+        self.planWeeklyResetAtMs = planWeeklyResetAtMs
+        self.planUsageFetchedAtMs = planUsageFetchedAtMs
         self.sharedResources = sharedResources
     }
 }
@@ -63,6 +76,11 @@ public func mergeRows(profiles: [ProfileView], usage: [ProfileUsageView]) -> [Pr
             totalTokens: u?.totalTokens ?? 0,
             costUsd: u?.costUsd ?? 0,
             resetAtMs: u?.resetAtMs,
+            planFiveHourPercent: u?.planFiveHourPercent,
+            planFiveHourResetAtMs: u?.planFiveHourResetAtMs,
+            planWeeklyPercent: u?.planWeeklyPercent,
+            planWeeklyResetAtMs: u?.planWeeklyResetAtMs,
+            planUsageFetchedAtMs: u?.planUsageFetchedAtMs,
             sharedResources: p.sharedResources
         )
     }

@@ -1,4 +1,4 @@
-import { loadConfig, readProfileUsage } from "@ccm/core";
+import { loadConfig, readClaudePlanUsage, readProfileUsage } from "@ccm/core";
 
 export interface Row {
   profile: string;
@@ -33,7 +33,61 @@ const COLUMNS: { key: keyof Row; header: string; align: "left" | "right" }[] = [
 
 function fmtReset(resetAt: number | null): string {
   if (resetAt === null) return "—";
-  return new Date(resetAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  const date = new Date(resetAt);
+  const now = new Date();
+  const sameDay = date.getFullYear() === now.getFullYear()
+    && date.getMonth() === now.getMonth() && date.getDate() === now.getDate();
+  return date.toLocaleString([], sameDay
+    ? { hour: "2-digit", minute: "2-digit", hour12: false }
+    : { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function fmtAge(fetchedAt: number, now = Date.now()): string {
+  const minutes = Math.max(0, Math.floor((now - fetchedAt) / 60_000));
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`;
+}
+
+export interface PlanRow {
+  profile: string;
+  limit: string;
+  used: string;
+  reset: string;
+  updated: string;
+}
+
+export function renderPlanUsageTable(rows: PlanRow[]): string[] {
+  const columns: Array<{ key: keyof PlanRow; header: string }> = [
+    { key: "profile", header: "PROFILE" },
+    { key: "limit", header: "LIMIT" },
+    { key: "used", header: "USED" },
+    { key: "reset", header: "RESET" },
+    { key: "updated", header: "UPDATED" },
+  ];
+  const displayRows = rows.map((row) => ({ ...row, limit: truncate(row.limit, 20) }));
+  const fixedColumns = columns.filter((column) => column.key !== "profile");
+  const fixedWidths = fixedColumns.map((column) =>
+    Math.max(column.header.length, ...displayRows.map((row) => row[column.key].length)),
+  );
+  const profileBudget = Math.max(
+    "PROFILE".length,
+    TABLE_WIDTH - (columns.length - 1) * 2 - fixedWidths.reduce((sum, width) => sum + width, 0),
+  );
+  const normalizedRows = displayRows.map((row) => ({
+    ...row,
+    profile: truncate(row.profile, profileBudget),
+  }));
+  const widths = columns.map((column) =>
+    Math.max(column.header.length, ...normalizedRows.map((row) => row[column.key].length)),
+  );
+  return [
+    columns.map((column, index) => column.header.padEnd(widths[index]!)).join("  ").trimEnd(),
+    ...normalizedRows.map((row) => columns.map((column, index) =>
+      row[column.key].padEnd(widths[index]!),
+    ).join("  ").trimEnd()),
+  ];
 }
 
 function pad(text: string, width: number, align: "left" | "right"): string {
@@ -108,8 +162,35 @@ export async function statusCommand(): Promise<void> {
     return;
   }
 
-  const rows: Row[] = await Promise.all(
-    c.profiles.map(async (p) => {
+  const subscriptionProfiles = c.profiles.filter((profile) => profile.kind === "subscription");
+  if (subscriptionProfiles.length > 0) {
+    const planRows = (await Promise.all(subscriptionProfiles.map(async (profile) => {
+      const usage = await readClaudePlanUsage(profile.name);
+      const marker = profile.name === c.active ? "*" : " ";
+      if (!usage || usage.limits.length === 0) {
+        return [{
+          profile: `${marker} ${profile.name}`,
+          limit: "Account",
+          used: "—",
+          reset: "—",
+          updated: "no cache",
+        }];
+      }
+      return usage.limits.map((limit, index) => ({
+        profile: index === 0 ? `${marker} ${profile.name}` : "",
+        limit: limit.active ? `${limit.label} *` : limit.label,
+        used: `${Math.round(limit.utilization)}%`,
+        reset: fmtReset(limit.resetAt),
+        updated: fmtAge(usage.fetchedAt),
+      }));
+    }))).flat();
+    console.log("CLAUDE PLAN USAGE");
+    for (const line of renderPlanUsageTable(planRows)) console.log(line);
+  }
+
+  const apiProfiles = c.profiles.filter((profile) => profile.kind === "api-key");
+  if (apiProfiles.length > 0) {
+    const rows: Row[] = await Promise.all(apiProfiles.map(async (p) => {
       const usage = await readProfileUsage(p.name);
       const marker = p.name === c.active ? "*" : " ";
       return {
@@ -122,15 +203,19 @@ export async function statusCommand(): Promise<void> {
         // A subscription profile's usage is not billed per token, so there
         // is nothing meaningful to estimate — only api-key profiles pay
         // per-token.
-        cost: p.kind === "api-key" ? `$${usage.costUsd.toFixed(2)}` : "—",
-        reset: fmtReset(usage.resetAt),
+        cost: `$${usage.costUsd.toFixed(2)}`,
+        // API-key profiles are pay-as-you-go and do not have a subscription
+        // reset window. Transcript timestamps must not invent one.
+        reset: "—",
       };
-    }),
-  );
+    }));
 
-  for (const line of renderUsageTable(rows)) {
-    console.log(line);
+    if (subscriptionProfiles.length > 0) console.log("");
+    console.log("LOCAL API USAGE (LAST 5 HOURS)");
+    for (const line of renderUsageTable(rows)) console.log(line);
   }
 
-  console.log("\nNumbers cover the current 5-hour rate-limit window.");
+  if (subscriptionProfiles.length > 0) {
+    console.log("\nPlan percentages and resets come from Claude's per-account usage cache. Run /usage in Claude to refresh it.");
+  }
 }

@@ -1,5 +1,5 @@
 import { expect, test, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, mkdir, copyFile } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, copyFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addProfile } from "./profile-store";
@@ -9,6 +9,7 @@ import {
   parseTranscriptLine,
   estimateCostUsd,
   readProfileUsage,
+  readClaudePlanUsage,
   type UsageEntry,
 } from "./usage";
 
@@ -242,4 +243,56 @@ test("resetAt equals the earliest in-window entry's timestamp + WINDOW_MS", asyn
   const now = Date.parse("2026-07-16T10:10:00.000Z");
   const usage = await readProfileUsage("work", now);
   expect(usage.resetAt).toBe(Date.parse("2026-07-16T10:00:05.000Z") + WINDOW_MS);
+});
+
+test("reads authoritative account limits cached by Claude Code", async () => {
+  await addProfile("work", "subscription");
+  await writeFile(join(profileDir("work"), ".claude.json"), JSON.stringify({
+    cachedUsageUtilization: {
+      fetchedAtMs: 1_784_781_109_168,
+      accountUuid: "must-not-be-returned",
+      utilization: {
+        limits: [
+          { kind: "session", percent: 75, resets_at: "2026-07-23T06:00:00Z", is_active: true },
+          { kind: "weekly_all", percent: 52, resets_at: "2026-07-28T19:00:00Z", is_active: false },
+          {
+            kind: "weekly_scoped", percent: 32,
+            resets_at: "2026-07-28T18:59:59Z", is_active: false,
+            scope: { model: { display_name: "Fable" } },
+          },
+        ],
+      },
+    },
+  }));
+
+  expect(await readClaudePlanUsage("work")).toEqual({
+    profile: "work",
+    fetchedAt: 1_784_781_109_168,
+    limits: [
+      { kind: "session", label: "5-hour", utilization: 75, resetAt: Date.parse("2026-07-23T06:00:00Z"), active: true },
+      { kind: "weekly_all", label: "Weekly", utilization: 52, resetAt: Date.parse("2026-07-28T19:00:00Z"), active: false },
+      { kind: "weekly_scoped", label: "Weekly · Fable", utilization: 32, resetAt: Date.parse("2026-07-28T18:59:59Z"), active: false },
+    ],
+  });
+});
+
+test("falls back to named Claude usage windows and rejects malformed cache", async () => {
+  await addProfile("work", "subscription");
+  await writeFile(join(profileDir("work"), ".claude.json"), JSON.stringify({
+    cachedUsageUtilization: {
+      fetchedAtMs: 123,
+      utilization: {
+        five_hour: { utilization: 18, resets_at: "2026-07-23T10:00:00Z" },
+        seven_day: { utilization: 41, resets_at: "invalid" },
+      },
+    },
+  }));
+  const usage = await readClaudePlanUsage("work");
+  expect(usage?.limits).toEqual([
+    { kind: "session", label: "5-hour", utilization: 18, resetAt: Date.parse("2026-07-23T10:00:00Z"), active: true },
+    { kind: "weekly_all", label: "Weekly", utilization: 41, resetAt: null, active: false },
+  ]);
+
+  await writeFile(join(profileDir("work"), ".claude.json"), "not json");
+  expect(await readClaudePlanUsage("work")).toBeNull();
 });

@@ -28,15 +28,16 @@ import ViewInspector
             ProfileUsageView(
                 profile: "work", kind: "api-key", inputTokens: 100, cacheWrite5mTokens: 10,
                 cacheWrite1hTokens: 5, cacheReadTokens: 20, outputTokens: 65, totalTokens: 200,
-                costUsd: 1.23, resetAtMs: nil)
+                costUsd: 1.23, resetAtMs: nil, planFiveHourPercent: nil,
+                planFiveHourResetAtMs: nil, planWeeklyPercent: nil,
+                planWeeklyResetAtMs: nil, planUsageFetchedAtMs: nil)
         ])
     let model = AppModel(backend: backend)
     await model.load()
 
     let tab = UsageTab(model: model)
-    #expect(try tab.inspect().find(text: "200 tokens").string() == "200 tokens")
+    #expect(try tab.inspect().find(text: "200 local tokens").string() == "200 local tokens")
     #expect(try tab.inspect().find(text: "$1.23").string() == "$1.23")
-    #expect(try tab.inspect().find(text: "resets in —").string() == "resets in —")
     #expect(try tab.inspect().find(text: "Input 100").string() == "Input 100")
     #expect(try tab.inspect().find(text: "Cache write 5m 10").string() == "Cache write 5m 10")
     #expect(try tab.inspect().find(text: "Cache write 1h 5").string() == "Cache write 1h 5")
@@ -85,16 +86,16 @@ import ViewInspector
 
 @MainActor
 @Test func aZeroUsageSubscriptionRowRendersDashesNotCrashesOrNaN() async throws {
-    // Pins the "zero-usage profile must render sanely" requirement: a fresh
-    // profile has totalTokens == 0, which would divide-by-zero in the bar's
-    // width math if `UsageBar` did not guard it before this test was added.
+    // A subscription without Claude's account cache must be honest about the
+    // missing data instead of deriving a fake reset from local transcripts.
     let backend = FakeBackend()
     backend.set(profiles: [ProfileView(name: "fresh", kind: "subscription", active: false)])
     let model = AppModel(backend: backend)
     await model.load()
 
     let tab = UsageTab(model: model)
-    #expect(try tab.inspect().find(text: "0 tokens").string() == "0 tokens")
-    #expect(try tab.inspect().find(text: "—").string() == "—")  // cost, subscription
+    #expect(try tab.inspect().find(text: "Not available").string() == "Not available")
     #expect(try tab.inspect().find(text: "resets in —").string() == "resets in —")
+    #expect(try tab.inspect().find(text: "No Claude usage cache yet. Open this profile in Claude and run /usage.").string()
+        == "No Claude usage cache yet. Open this profile in Claude and run /usage.")
 }

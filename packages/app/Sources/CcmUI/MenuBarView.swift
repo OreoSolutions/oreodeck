@@ -118,7 +118,9 @@ public struct MenuBarView: View {
                                     Text(row.name).font(.callout.weight(.semibold))
                                     if row.active { StatusPill(text: "Active", color: OreoTheme.cyan) }
                                 }
-                                Text("\(formatTokens(row.totalTokens)) tokens · resets \(formatCountdown(resetAtMs: row.resetAtMs, nowMs: model.nowMs))")
+                                Text(row.kind == "subscription"
+                                    ? "\(row.planFiveHourPercent.map { "\(Int($0.rounded()))% used" } ?? "Usage unavailable") · resets \(formatCountdown(resetAtMs: row.planFiveHourResetAtMs, nowMs: model.nowMs))"
+                                    : "\(formatTokens(row.totalTokens)) local tokens · API billing")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }

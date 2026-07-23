@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { renderUsageTable, type Row } from "./status";
+import { renderPlanUsageTable, renderUsageTable, type PlanRow, type Row } from "./status";
 
 /**
  * Worst-case row per the brief: a 12-char profile name and a 7-figure count
@@ -77,4 +77,19 @@ test("status table stays within 80 columns for a 64-char (max legal) profile nam
 test("status table visibly marks a truncated profile name with an ellipsis", () => {
   const [, row] = renderUsageTable([longestNameWorstCaseRow()]);
   expect(row).toContain("…");
+});
+
+test("plan usage table shows account percentages and stays within 80 columns", () => {
+  const row: PlanRow = {
+    profile: `* ${"p".repeat(64)}`,
+    limit: "Weekly · A very long model scope",
+    used: "100%",
+    reset: "Tuesday 23:59",
+    updated: "12m ago",
+  };
+  const lines = renderPlanUsageTable([row]);
+  expect(lines[0]).toContain("USED");
+  expect(lines[1]).toContain("100%");
+  expect(lines[1]).toContain("…");
+  expect(lines.every((line) => line.length <= 80)).toBe(true);
 });

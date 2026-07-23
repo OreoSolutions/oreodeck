@@ -64,6 +64,33 @@ public struct UsageBar: View {
     }
 }
 
+private struct PlanUsageBar: View {
+    let label: String
+    let percent: Double?
+    let resetAtMs: Int64?
+    let nowMs: Int64
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(label).font(.subheadline.weight(.semibold))
+                Spacer()
+                if let percent {
+                    Text("\(Int(percent.rounded()))% used")
+                        .monospacedDigit()
+                } else {
+                    Text("Not available").foregroundStyle(.secondary)
+                }
+                Text("resets in \(formatCountdown(resetAtMs: resetAtMs, nowMs: nowMs))")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            ProgressView(value: min(max(percent ?? 0, 0), 100), total: 100)
+                .tint((percent ?? 0) >= 90 ? .red : (percent ?? 0) >= 70 ? .orange : .accentColor)
+        }
+    }
+}
+
 public struct UsageTab: View {
     @ObservedObject private var model: AppModel
 
@@ -77,9 +104,9 @@ public struct UsageTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 PageHeader(
-                    eyebrow: "Five-hour window",
+                    eyebrow: "Claude account limits",
                     title: "Usage overview",
-                    subtitle: "Compare token composition, estimated API cost and reset timing.",
+                    subtitle: "Account usage and reset times reported by Claude, separated by profile.",
                     systemImage: "chart.bar.xaxis"
                 )
                 if let loadError = model.loadError {
@@ -99,7 +126,7 @@ public struct UsageTab: View {
                     )
                 } else {
                     ForEach(model.rows) { row in
-                        VStack(alignment: .leading, spacing: 6) {
+                        VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 Text(row.name).font(.headline)
                                 if row.active {
@@ -111,16 +138,39 @@ public struct UsageTab: View {
                                         .clipShape(Capsule())
                                 }
                                 Spacer()
-                                Text("\(formatTokens(row.totalTokens)) tokens")
-                                    .monospacedDigit()
-                                Text(formatCost(kind: row.kind, costUsd: row.costUsd))
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                                Text("resets in \(formatCountdown(resetAtMs: row.resetAtMs, nowMs: model.nowMs))")
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
+                                if row.kind == "api-key" {
+                                    Text("\(formatTokens(row.totalTokens)) local tokens")
+                                        .monospacedDigit()
+                                    Text(formatCost(kind: row.kind, costUsd: row.costUsd))
+                                        .monospacedDigit()
+                                        .foregroundStyle(.secondary)
+                                } else if let fetchedAt = row.planUsageFetchedAtMs {
+                                    Text("updated \(formatAge(timestampMs: fetchedAt, nowMs: model.nowMs))")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
-                            UsageBar(row: row)
+                            if row.kind == "subscription" {
+                                PlanUsageBar(
+                                    label: "5-hour session",
+                                    percent: row.planFiveHourPercent,
+                                    resetAtMs: row.planFiveHourResetAtMs,
+                                    nowMs: model.nowMs
+                                )
+                                PlanUsageBar(
+                                    label: "Weekly",
+                                    percent: row.planWeeklyPercent,
+                                    resetAtMs: row.planWeeklyResetAtMs,
+                                    nowMs: model.nowMs
+                                )
+                                if row.planUsageFetchedAtMs == nil {
+                                    Text("No Claude usage cache yet. Open this profile in Claude and run /usage.")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            } else {
+                                UsageBar(row: row)
+                            }
                         }
                     }
                 }

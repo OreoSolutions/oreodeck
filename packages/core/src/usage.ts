@@ -31,6 +31,20 @@ export interface ProfileUsage {
   resetAt: number | null;
 }
 
+export interface ClaudeRateLimit {
+  kind: string;
+  label: string;
+  utilization: number;
+  resetAt: number | null;
+  active: boolean;
+}
+
+export interface ClaudePlanUsage {
+  profile: string;
+  fetchedAt: number;
+  limits: ClaudeRateLimit[];
+}
+
 /** USD per 1M tokens. Cache multipliers below apply to `input`, never `output`. */
 const SONNET_5_INTRO_END_MS = Date.parse("2026-09-01T00:00:00Z");
 
@@ -59,6 +73,85 @@ const CACHE_READ_MULTIPLIER = 0.1;
 
 function num(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function timestamp(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function limitLabel(kind: string, scope: unknown): string {
+  if (kind === "session") return "5-hour";
+  if (kind === "weekly_all") return "Weekly";
+  const scopeRecord = record(scope);
+  const model = record(scopeRecord?.model);
+  const modelName = typeof model?.display_name === "string" ? model.display_name.trim() : "";
+  if (modelName) return `Weekly · ${modelName}`;
+  return kind.split("_").map((part) => part[0]?.toUpperCase() + part.slice(1)).join(" ");
+}
+
+/** Read Claude Code's account-level usage cache. This is the same data used by
+ * `/usage` and status-line `rate_limits`; unlike transcript totals it includes
+ * usage from Claude.ai, Desktop, IDEs, and other Claude Code sessions. */
+export async function readClaudePlanUsage(profileName: string): Promise<ClaudePlanUsage | null> {
+  let state: unknown;
+  try {
+    state = JSON.parse(await readFile(join(profileDir(profileName), ".claude.json"), "utf8"));
+  } catch {
+    return null;
+  }
+  const root = record(state);
+  const cached = record(root?.cachedUsageUtilization);
+  const utilization = record(cached?.utilization);
+  const fetchedAt = finiteNumber(cached?.fetchedAtMs);
+  if (!utilization || fetchedAt === null) return null;
+
+  const limits: ClaudeRateLimit[] = [];
+  const rawLimits = Array.isArray(utilization.limits) ? utilization.limits : [];
+  for (const raw of rawLimits) {
+    const value = record(raw);
+    const kind = typeof value?.kind === "string" ? value.kind : "";
+    const percent = finiteNumber(value?.percent);
+    if (!kind || percent === null) continue;
+    limits.push({
+      kind,
+      label: limitLabel(kind, value?.scope),
+      utilization: percent,
+      resetAt: timestamp(value?.resets_at),
+      active: value?.is_active === true,
+    });
+  }
+
+  // Older Claude Code builds cached only the named windows, without `limits`.
+  for (const [kind, key, label] of [
+    ["session", "five_hour", "5-hour"],
+    ["weekly_all", "seven_day", "Weekly"],
+  ] as const) {
+    if (limits.some((limit) => limit.kind === kind)) continue;
+    const value = record(utilization[key]);
+    const percent = finiteNumber(value?.utilization);
+    if (percent === null) continue;
+    limits.push({
+      kind,
+      label,
+      utilization: percent,
+      resetAt: timestamp(value?.resets_at),
+      active: kind === "session",
+    });
+  }
+
+  return { profile: profileName, fetchedAt, limits };
 }
 
 /**

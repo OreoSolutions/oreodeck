@@ -24,7 +24,17 @@ public func formatCountdown(resetAtMs: Int64?, nowMs: Int64) -> String {
     let totalMinutes = Int(remainingMs / 60_000)
     let hours = totalMinutes / 60
     let minutes = totalMinutes % 60
+    if hours >= 24 { return "\(hours / 24)d \(hours % 24)h" }
     return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+}
+
+public func formatAge(timestampMs: Int64, nowMs: Int64) -> String {
+    let minutes = max(0, (nowMs - timestampMs) / 60_000)
+    if minutes < 1 { return "now" }
+    if minutes < 60 { return "\(minutes)m ago" }
+    let hours = minutes / 60
+    if hours < 24 { return "\(hours)h ago" }
+    return "\(hours / 24)d ago"
 }
 
 /// Turns a typed error into copy a human can read. This is a `switch` on the

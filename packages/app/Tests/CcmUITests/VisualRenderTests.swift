@@ -22,7 +22,10 @@ import Testing
                 profile: "work", kind: "subscription", inputTokens: 12_400,
                 cacheWrite5mTokens: 2_100, cacheWrite1hTokens: 900,
                 cacheReadTokens: 8_200, outputTokens: 4_600, totalTokens: 28_200,
-                costUsd: 0, resetAtMs: nil),
+                costUsd: 0, resetAtMs: nil, planFiveHourPercent: 75,
+                planFiveHourResetAtMs: 1_784_214_005_000, planWeeklyPercent: 52,
+                planWeeklyResetAtMs: 1_784_600_000_000,
+                planUsageFetchedAtMs: 1_784_203_100_000),
         ])
     let model = AppModel(backend: backend)
     await model.load()

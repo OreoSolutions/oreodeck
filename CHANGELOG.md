@@ -7,6 +7,19 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- `ord status` and the native app now use Claude's per-account five-hour and
+  weekly usage percentages and exact reset timestamps for subscription
+  profiles, including usage from Claude.ai, Desktop, IDEs, and Claude Code.
+- API-key profiles now report local token/cost telemetry without an invented
+  subscription reset window.
+
+### Fixed
+
+- Removed the inaccurate reset estimate based on the oldest local transcript
+  entry and exposed the age of Claude's cached account-usage data.
+
 ## [0.1.7] - 2026-07-23
 
 ### Added

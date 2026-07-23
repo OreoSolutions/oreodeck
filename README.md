@@ -244,11 +244,18 @@ model, MCP and settings summary. OAuth tokens, API keys and account UUIDs are
 never included. Claude's built-in `/status` remains the source for live session
 ID, connection health and runtime model details.
 
-View the current five-hour usage window:
+View Claude's account-level five-hour and weekly plan usage for each
+subscription profile, plus local token/cost telemetry for API-key profiles:
 
 ```bash
 ord status
 ```
+
+Subscription percentages and exact reset timestamps come from the usage cache
+written by Claude Code, so they include activity from Claude.ai, Desktop, IDEs,
+and other Claude sessions on the same account. Run `/usage` inside Claude to
+refresh that account's cache. OreoDeck displays the cache age instead of
+presenting stale data as live.
 
 Configure failover:
 

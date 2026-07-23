@@ -143,6 +143,11 @@ ord failover show
 ord failover off
 ```
 
+`ord status` 使用 Claude Code 提供的帐户级五小时/每周用量百分比和准确重置时间，
+因此包含 Claude.ai、Desktop、IDE 及同一帐户的其他 Claude 会话。请在 Claude
+中运行 `/usage` 刷新该配置档案的缓存；OreoDeck 会显示缓存时间。API 密钥配置
+档案仅显示本地 token/费用，不再推算订阅重置时间。
+
 无头运行检测到限流时可以自动尝试下一个配置档案。交互运行会在迁移当前会话前请求确认。
 
 ## 桌面应用

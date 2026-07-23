@@ -144,6 +144,12 @@ ord failover show
 ord failover off
 ```
 
+`ord status` dùng phần trăm usage 5 giờ/tuần và thời điểm reset theo tài khoản
+do Claude Code cung cấp, nên bao gồm cả Claude.ai, Desktop, IDE và các phiên
+Claude khác. Chạy `/usage` trong Claude để làm mới cache của profile; OreoDeck
+luôn hiển thị tuổi cache. Profile API key chỉ hiển thị token/cost cục bộ và
+không có mốc reset subscription giả định.
+
 Headless run có thể tự thử profile tiếp theo khi gặp rate limit. Interactive run sẽ hỏi xác nhận trước khi chuyển session.
 
 ## Desktop app

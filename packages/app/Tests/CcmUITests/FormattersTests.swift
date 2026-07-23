@@ -24,6 +24,7 @@ import Testing
     #expect(formatCountdown(resetAtMs: nil, nowMs: 1_784_203_200_000) == "—")
     #expect(formatCountdown(resetAtMs: 1_784_214_005_000, nowMs: 1_784_203_200_000) == "3h 0m")
     #expect(formatCountdown(resetAtMs: 1_784_203_200_000 + 45 * 60_000, nowMs: 1_784_203_200_000) == "45m")
+    #expect(formatCountdown(resetAtMs: 1_784_203_200_000 + 49 * 60 * 60_000, nowMs: 1_784_203_200_000) == "2d 1h")
     #expect(formatCountdown(resetAtMs: 1_784_203_200_000, nowMs: 1_784_203_200_000) == "now")
     #expect(formatCountdown(resetAtMs: 1_784_203_100_000, nowMs: 1_784_203_200_000) == "now")
 }
