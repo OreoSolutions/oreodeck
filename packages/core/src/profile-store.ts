@@ -147,9 +147,10 @@ export async function setActive(name: string): Promise<void> {
   });
 }
 
-/** Chọn profile: override (-P) > profile của tab > active toàn cục. */
-export async function resolveProfileName(override?: string): Promise<string> {
-  const requested = override || process.env.OREODECK_PROFILE?.trim();
+/** Chọn profile: override (-P) > project .oreodeck > tab > active toàn cục. */
+export async function resolveProfileName(override?: string, cwd = process.cwd()): Promise<string> {
+  const projectProfile = override ? null : (await import("./project-config")).findProjectProfile(cwd);
+  const requested = override || (await projectProfile)?.profile || process.env.OREODECK_PROFILE?.trim();
   if (requested) {
     const profile = await getProfile(requested);
     if (!profile) {

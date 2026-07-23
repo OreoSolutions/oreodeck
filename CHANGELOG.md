@@ -7,6 +7,24 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added project-local profile selection through `.oreodeck/config.json` and
+  `ord use --project <profile>`, with explicit `-P` retaining highest priority.
+
+### Changed
+
+- `ord sessions` now defaults to the current project folder; use `--all` to
+  browse sessions from every project.
+
+### Fixed
+
+- Auto-update now preserves the existing UI and shell-integration choices, so
+  it asks only once for update confirmation instead of repeating installer
+  questions.
+- Automatic update discovery now also runs for the bare command and refreshes
+  its release cache every 15 minutes.
+
 ## [0.1.3] - 2026-07-23
 
 ### Changed

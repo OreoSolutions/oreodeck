@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { access, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { ccmHome } from "@ccm/core";
 import { promptConfirm } from "./prompt";
@@ -11,7 +11,7 @@ type ReleaseAsset = { name: string; browser_download_url: string };
 export type ReleaseInfo = { version: string; htmlUrl: string; assets: ReleaseAsset[] };
 type UpdateCache = { checkedAt: number; release: ReleaseInfo | null };
 
-const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const API_URL = `https://api.github.com/repos/${OREODECK_REPOSITORY}/releases/latest`;
 
 export function compareVersions(left: string, right: string): number {
@@ -73,12 +73,43 @@ async function download(url: string): Promise<Buffer> {
   return Buffer.from(await response.arrayBuffer());
 }
 
-async function run(command: string, args: string[], cwd?: string): Promise<void> {
+async function run(
+  command: string,
+  args: string[],
+  cwd?: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: "inherit" });
+    const child = spawn(command, args, { cwd, env, stdio: "inherit" });
     child.once("error", reject);
     child.once("exit", (code) => code === 0 ? resolve() : reject(new Error(`${command} exited with code ${code}.`)));
   });
+}
+
+async function exists(path: string): Promise<boolean> {
+  try { await access(path); return true; }
+  catch { return false; }
+}
+
+/** Preserve the choices from the existing installation. Updates should have
+ * exactly one confirmation prompt and must never re-run first-install setup. */
+export async function updateInstallerEnvironment(
+  base: NodeJS.ProcessEnv = process.env,
+): Promise<NodeJS.ProcessEnv> {
+  const home = base.HOME || homedir();
+  const appDir = base.OREODECK_INSTALL_APP_DIR || join(home, "Applications");
+  const zshrc = base.OREODECK_ZSHRC || join(home, ".zshrc");
+  let shellInstalled = false;
+  try {
+    const contents = await readFile(zshrc, "utf8");
+    shellInstalled = contents.includes("# >>> OreoDeck shell integration");
+  } catch { /* A missing shell file means shell integration was not installed. */ }
+  return {
+    ...base,
+    OREODECK_INSTALL_UI: await exists(join(appDir, "OreoDeck.app")) ? "Y" : "N",
+    OREODECK_INSTALL_SHELL: shellInstalled ? "Y" : "N",
+    OREODECK_UPDATE_MODE: "1",
+  };
 }
 
 export async function installRelease(release: ReleaseInfo): Promise<void> {
@@ -106,7 +137,12 @@ export async function installRelease(release: ReleaseInfo): Promise<void> {
       .find((entry) => entry.isDirectory() && entry.name.startsWith("oreodeck-"));
     if (!root) throw new Error("Release archive has no installable directory.");
     const installScript = join(dir, root.name, "install.sh");
-    await run("/bin/bash", [installScript], join(dir, root.name));
+    await run(
+      "/bin/bash",
+      [installScript],
+      join(dir, root.name),
+      await updateInstallerEnvironment(),
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

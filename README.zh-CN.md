@@ -93,7 +93,9 @@ ord use --tab personal
 claude
 ```
 
-解析优先级：`-P/--profile` → 当前标签页固定的配置档案 → `ord use <name>` 选择的全局配置档案。
+解析优先级：`-P/--profile` → 项目中最近的 `.oreodeck/config.json` → 当前标签页固定的配置档案 → `ord use <name>` 选择的全局配置档案。
+
+使用 `ord use --project work` 为当前项目设置默认配置档案。该命令创建内容为 `{ "profile": "work" }` 的 `.oreodeck/config.json`；`ord run -P personal` 仍可仅覆盖当前一次运行。
 
 ## 会话
 
@@ -102,10 +104,11 @@ ord sessions
 ord sessions --from global
 ord sessions --from personal
 ord sessions --list
+ord sessions --all
 ord sessions -P work
 ```
 
-会话按需复制，而不是共享整个历史目录，从而保持配置档案隔离。
+默认仅显示当前项目文件夹的会话；使用 `--all` 浏览所有项目。会话按需复制，而不是共享整个历史目录，从而保持配置档案隔离。
 
 ## 共享资源
 

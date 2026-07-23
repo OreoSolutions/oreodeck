@@ -150,13 +150,25 @@ claude
 Profile resolution follows this order:
 
 1. Explicit `-P` / `--profile` option.
-2. Profile pinned to the current tab with `ord use --tab`.
-3. Global active profile selected with `ord use <name>`.
+2. Nearest project config at `.oreodeck/config.json`.
+3. Profile pinned to the current tab with `ord use --tab`.
+4. Global active profile selected with `ord use <name>`.
+
+Set a default profile for the current project:
+
+```bash
+cd /path/to/project
+ord use --project work
+```
+
+This creates `.oreodeck/config.json` containing `{ "profile": "work" }`.
+Running `ord run` or the shell-integrated `claude` command anywhere below that
+project uses `work`; `ord run -P personal` still overrides it for one run.
 
 ## Sessions
 
-Pick a session from global Claude or another profile, copy it into the current
-profile, and resume it immediately:
+Pick a session for the current project folder from global Claude or another
+profile, copy it into the destination profile, and resume it immediately:
 
 ```bash
 ord sessions
@@ -168,10 +180,12 @@ Useful filters:
 ord sessions --from global
 ord sessions --from personal
 ord sessions --list
+ord sessions --all
 ord sessions -P work
 ```
 
-The picker excludes the destination profile and subagent transcripts. Sessions
+Use `--all` to browse other project folders. The picker excludes the destination
+profile and subagent transcripts. Sessions
 are copied on demand rather than sharing the entire history directory, keeping
 profiles isolated.
 

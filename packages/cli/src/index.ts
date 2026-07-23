@@ -44,6 +44,7 @@ program
   .description("Set the active profile")
   .argument("<name>", "profile name")
   .option("-t, --tab", "use this profile only in the current terminal tab")
+  .option("--project", "save this profile in .oreodeck/config.json for the current project")
   .action(useCommand);
 
 program
@@ -74,6 +75,7 @@ program
   .description("Pick a session from global or another profile and resume it here")
   .option("-P, --profile <name>", "destination profile (defaults to this tab or active profile)")
   .option("--from <source>", "only show sessions from global or one profile")
+  .option("--all", "include sessions from every project instead of only the current folder")
   .option("-l, --list", "list available sessions without importing")
   .action(sessionsCommand);
 
@@ -128,6 +130,7 @@ shared.command("clear").argument("<profile>").action(sharedClearCommand);
 // and an unknown command like `ccm bogus` still reaches commander's
 // unknownCommand() handling (exit 1) since argv has at least one operand.
 if (process.argv.length <= 2) {
+  await maybePromptForUpdate([]);
   program.outputHelp();
   process.exit(0);
 }

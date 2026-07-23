@@ -7,3 +7,4 @@ export * from "./usage";
 export * from "./failover";
 export * from "./shared";
 export * from "./shared-config";
+export * from "./project-config";

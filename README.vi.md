@@ -93,7 +93,9 @@ ord use --tab personal
 claude
 ```
 
-Thứ tự chọn profile: `-P/--profile` → profile của tab → profile global từ `ord use <name>`.
+Thứ tự chọn profile: `-P/--profile` → `.oreodeck/config.json` gần nhất trong project → profile của tab → profile global từ `ord use <name>`.
+
+Đặt profile mặc định cho project hiện tại bằng `ord use --project work`. Lệnh này tạo `.oreodeck/config.json` với nội dung `{ "profile": "work" }`; `ord run -P personal` vẫn ghi đè cho riêng lần chạy đó.
 
 ## Session
 
@@ -102,10 +104,11 @@ ord sessions
 ord sessions --from global
 ord sessions --from personal
 ord sessions --list
+ord sessions --all
 ord sessions -P work
 ```
 
-Session được copy theo yêu cầu thay vì chia sẻ toàn bộ history, nhờ đó profile vẫn cô lập.
+Mặc định chỉ hiện session của folder project đang đứng; dùng `--all` để xem mọi project. Session được copy theo yêu cầu thay vì chia sẻ toàn bộ history, nhờ đó profile vẫn cô lập.
 
 ## Tài nguyên dùng chung
 
