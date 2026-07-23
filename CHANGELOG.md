@@ -7,6 +7,13 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Auto-update now shows download progress and uses a compact update-specific
+  installer without repeating first-install prompts.
+- Every regular `ord` command now checks a five-minute cached release-version
+  manifest and calls the GitHub API only when that version differs.
+
 ## [0.1.5] - 2026-07-23
 
 ### Changed

@@ -52,6 +52,7 @@ if [[ "$PUBLISH" == true ]]; then
     "dist/oreodeck-$VERSION-macos-$ARCH.zip.sha256" \
     "dist/oreodeck-macos-$ARCH.zip" \
     "dist/oreodeck-macos-$ARCH.zip.sha256" \
+    "dist/oreodeck-version.txt" \
     --title "OreoDeck $VERSION" --notes-file "$NOTES_FILE"
   git push origin HEAD:main
 else

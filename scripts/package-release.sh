@@ -5,6 +5,7 @@ cd "$ROOT"
 VERSION="${1:-$(bun -e 'console.log((await Bun.file("package.json").json()).version)')}"
 ARCH="${OREODECK_RELEASE_ARCH:-$(uname -m)}"
 NAME="oreodeck-$VERSION-macos-$ARCH"
+printf '%s\n' "$VERSION" > dist/oreodeck-version.txt
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT
 for item in dist/oreodeck dist/ord dist/OreoDeck.app; do

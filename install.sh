@@ -51,9 +51,15 @@ fi
 
 cd "$ROOT_DIR"
 
-echo "OreoDeck Installer"
-echo "=================="
-echo
+UPDATE_MODE="${OREODECK_UPDATE_MODE:-0}"
+if [ "$UPDATE_MODE" = "1" ]; then
+  echo "OreoDeck Update"
+  echo "───────────────"
+else
+  echo "OreoDeck Installer"
+  echo "=================="
+  echo
+fi
 
 PROMPT_UI="Install the OreoDeck desktop UI too? [Y/n]: "
 MSG_INSTALL_CLI="Installing the OreoDeck CLI from prebuilt binaries..."
@@ -79,12 +85,25 @@ MSG_SOURCE="Run: source ~/.zshrc"
 MSG_SKIP_SHELL="Skipping shell integration. Use 'ord run -P <profile>' to launch Claude."
 MSG_START="Get started with: oreodeck add work"
 
-echo
+if [ "$UPDATE_MODE" = "1" ]; then
+  MSG_INSTALL_CLI="→ Updating command-line tools"
+  MSG_PAYLOAD="✓ Desktop app payload prepared"
+  MSG_INSTALL_UI="→ Updating the desktop app"
+  MSG_BACKUP="  Previous app backed up at:"
+  MSG_UI_INSTALLED="✓ Desktop app updated:"
+  MSG_UI_RESTARTED="✓ OreoDeck restarted"
+  MSG_SKIP_UI="• Desktop app is not installed; keeping this update CLI-only"
+  MSG_COMMANDS="✓ Commands updated:"
+  MSG_ADD_PATH="⚠ Commands directory is not currently in PATH; add:"
+  MSG_SHELL_EXISTS="✓ Shell integration preserved in"
+  MSG_SKIP_SHELL="• Shell integration was not installed; leaving ~/.zshrc unchanged"
+fi
+
 INSTALL_UI="${OREODECK_INSTALL_UI:-}"
 [ -n "$INSTALL_UI" ] || prompt_read "$PROMPT_UI" INSTALL_UI
 INSTALL_UI="${INSTALL_UI:-Y}"
 
-echo
+if [ "$UPDATE_MODE" != "1" ]; then echo; fi
 if [ -x "$ROOT_DIR/dist/oreodeck" ] && [ -x "$ROOT_DIR/dist/ord" ]; then
   echo "$MSG_INSTALL_CLI"
 else
@@ -153,18 +172,18 @@ case "$INSTALL_UI" in
     ;;
 esac
 
-echo
+if [ "$UPDATE_MODE" != "1" ]; then echo; fi
 echo "$MSG_COMMANDS $BIN_DIR/oreodeck, $BIN_DIR/ord"
 case ":${PATH}:" in
   *":${BIN_DIR}:"*) ;;
   *)
-    echo
+    if [ "$UPDATE_MODE" != "1" ]; then echo; fi
     echo "$MSG_ADD_PATH"
     echo 'export PATH="$HOME/.local/bin:$PATH"'
     ;;
 esac
 
-echo
+if [ "$UPDATE_MODE" != "1" ]; then echo; fi
 INSTALL_SHELL="${OREODECK_INSTALL_SHELL:-}"
 SHELL_RELOAD_NEEDED=0
 [ -n "$INSTALL_SHELL" ] || prompt_read "$PROMPT_SHELL" INSTALL_SHELL
@@ -189,8 +208,10 @@ case "$INSTALL_SHELL" in
     ;;
 esac
 
-echo
-echo "$MSG_START"
+if [ "$UPDATE_MODE" != "1" ]; then
+  echo
+  echo "$MSG_START"
+fi
 if [ "$SHELL_RELOAD_NEEDED" = "1" ]; then
   echo "$MSG_SOURCE"
 fi
