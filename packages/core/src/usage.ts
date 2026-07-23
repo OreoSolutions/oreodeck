@@ -109,13 +109,13 @@ export async function readClaudePlanUsage(profileName: string): Promise<ClaudePl
   try {
     state = JSON.parse(await readFile(join(profileDir(profileName), ".claude.json"), "utf8"));
   } catch {
-    return null;
+    return readRealtimePlanUsage(profileName);
   }
   const root = record(state);
   const cached = record(root?.cachedUsageUtilization);
   const utilization = record(cached?.utilization);
   const fetchedAt = finiteNumber(cached?.fetchedAtMs);
-  if (!utilization || fetchedAt === null) return null;
+  if (!utilization || fetchedAt === null) return readRealtimePlanUsage(profileName);
 
   const limits: ClaudeRateLimit[] = [];
   const rawLimits = Array.isArray(utilization.limits) ? utilization.limits : [];
@@ -151,7 +151,41 @@ export async function readClaudePlanUsage(profileName: string): Promise<ClaudePl
     });
   }
 
-  return { profile: profileName, fetchedAt, limits };
+  const cachedResult = { profile: profileName, fetchedAt, limits };
+  const realtime = await readRealtimePlanUsage(profileName);
+  if (!realtime || realtime.fetchedAt <= fetchedAt) return cachedResult;
+  const realtimeKinds = new Set(realtime.limits.map((limit) => limit.kind));
+  return {
+    ...realtime,
+    limits: [...realtime.limits, ...limits.filter((limit) => !realtimeKinds.has(limit.kind))],
+  };
+}
+
+async function readRealtimePlanUsage(profileName: string): Promise<ClaudePlanUsage | null> {
+  let value: unknown;
+  try {
+    value = JSON.parse(await readFile(
+      join(profileDir(profileName), ".oreodeck", "rate-limits.json"),
+      "utf8",
+    ));
+  } catch {
+    return null;
+  }
+  const root = record(value);
+  const fetchedAt = finiteNumber(root?.capturedAtMs);
+  if (fetchedAt === null) return null;
+  const limits: ClaudeRateLimit[] = [];
+  for (const [key, kind, label] of [
+    ["fiveHour", "session", "5-hour"],
+    ["sevenDay", "weekly_all", "Weekly"],
+  ] as const) {
+    const window = record(root?.[key]);
+    const utilization = finiteNumber(window?.utilization);
+    if (utilization === null) continue;
+    const resetAt = finiteNumber(window?.resetAtMs);
+    limits.push({ kind, label, utilization, resetAt, active: kind === "session" });
+  }
+  return limits.length > 0 ? { profile: profileName, fetchedAt, limits } : null;
 }
 
 /**

@@ -296,3 +296,28 @@ test("falls back to named Claude usage windows and rejects malformed cache", asy
   await writeFile(join(profileDir("work"), ".claude.json"), "not json");
   expect(await readClaudePlanUsage("work")).toBeNull();
 });
+
+test("prefers the newer near-realtime status-line rate limits", async () => {
+  await addProfile("work", "subscription");
+  await writeFile(join(profileDir("work"), ".claude.json"), JSON.stringify({
+    cachedUsageUtilization: {
+      fetchedAtMs: 100,
+      utilization: {
+        five_hour: { utilization: 10, resets_at: "2026-07-23T10:00:00Z" },
+        seven_day: { utilization: 20, resets_at: "2026-07-29T10:00:00Z" },
+      },
+    },
+  }));
+  await mkdir(join(profileDir("work"), ".oreodeck"), { recursive: true });
+  await writeFile(join(profileDir("work"), ".oreodeck", "rate-limits.json"), JSON.stringify({
+    capturedAtMs: 200,
+    fiveHour: { utilization: 31, resetAtMs: 300 },
+    sevenDay: { utilization: 42, resetAtMs: 400 },
+  }));
+  const usage = await readClaudePlanUsage("work");
+  expect(usage?.fetchedAt).toBe(200);
+  expect(usage?.limits).toEqual([
+    { kind: "session", label: "5-hour", utilization: 31, resetAt: 300, active: true },
+    { kind: "weekly_all", label: "Weekly", utilization: 42, resetAt: 400, active: false },
+  ]);
+});

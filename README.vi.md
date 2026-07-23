@@ -150,6 +150,12 @@ Claude khác. Chạy `/usage` trong Claude để làm mới cache của profile;
 luôn hiển thị tuổi cache. Profile API key chỉ hiển thị token/cost cục bộ và
 không có mốc reset subscription giả định.
 
+Khi profile được mở qua OreoDeck, status-line proxy sẽ ghi nhận `rate_limits`
+sau mỗi API response và chuyển nguyên output sang status line hiện có. Proxy
+không đọc OAuth credential. `ord status` và app ưu tiên snapshot gần realtime
+này, sau đó mới fallback về cache tài khoản Claude. Sau khi nâng cấp OreoDeck,
+hãy mở một session mới cho profile để proxy được cài tự động.
+
 Headless run có thể tự thử profile tiếp theo khi gặp rate limit. Interactive run sẽ hỏi xác nhận trước khi chuyển session.
 
 ## Desktop app

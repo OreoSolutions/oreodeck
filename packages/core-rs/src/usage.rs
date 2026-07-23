@@ -137,7 +137,7 @@ fn parse_plan_window(value: Option<&Value>) -> Option<PlanWindow> {
 /// Account-level cache written by Claude Code for `/usage` and status-line
 /// `rate_limits`. It includes every Claude surface for this account, unlike
 /// local transcript aggregation. Only usage fields are deserialized here.
-pub fn read_claude_plan_usage(profile: &str) -> Option<ClaudePlanUsage> {
+fn read_cached_claude_plan_usage(profile: &str) -> Option<ClaudePlanUsage> {
     let state = fs::read_to_string(profile_dir(profile).ok()?.join(".claude.json")).ok()?;
     let root: Value = serde_json::from_str(&state).ok()?;
     let cached = root.get("cachedUsageUtilization")?.as_object()?;
@@ -148,6 +148,53 @@ pub fn read_claude_plan_usage(profile: &str) -> Option<ClaudePlanUsage> {
         five_hour: parse_plan_window(utilization.get("five_hour")),
         seven_day: parse_plan_window(utilization.get("seven_day")),
     })
+}
+
+fn read_realtime_claude_plan_usage(profile: &str) -> Option<ClaudePlanUsage> {
+    let state = fs::read_to_string(
+        profile_dir(profile)
+            .ok()?
+            .join(".oreodeck")
+            .join("rate-limits.json"),
+    )
+    .ok()?;
+    let root: Value = serde_json::from_str(&state).ok()?;
+    let fetched_at = root.get("capturedAtMs")?.as_i64()?;
+    let parse = |key: &str| -> Option<PlanWindow> {
+        let value = root.get(key)?.as_object()?;
+        let utilization = value.get("utilization")?.as_f64()?;
+        if !utilization.is_finite() {
+            return None;
+        }
+        Some(PlanWindow {
+            utilization,
+            reset_at: value.get("resetAtMs").and_then(Value::as_i64),
+        })
+    };
+    let five_hour = parse("fiveHour");
+    let seven_day = parse("sevenDay");
+    if five_hour.is_none() && seven_day.is_none() {
+        return None;
+    }
+    Some(ClaudePlanUsage {
+        fetched_at,
+        five_hour,
+        seven_day,
+    })
+}
+
+pub fn read_claude_plan_usage(profile: &str) -> Option<ClaudePlanUsage> {
+    let cached = read_cached_claude_plan_usage(profile);
+    let realtime = read_realtime_claude_plan_usage(profile);
+    match (cached, realtime) {
+        (Some(cached), Some(mut realtime)) if realtime.fetched_at > cached.fetched_at => {
+            realtime.five_hour = realtime.five_hour.or(cached.five_hour);
+            realtime.seven_day = realtime.seven_day.or(cached.seven_day);
+            Some(realtime)
+        }
+        (Some(cached), _) => Some(cached),
+        (None, realtime) => realtime,
+    }
 }
 
 pub fn parse_transcript_line(line: &str) -> Option<UsageEntry> {
@@ -470,6 +517,32 @@ mod tests {
             )
         );
         assert_eq!(usage.seven_day.unwrap().utilization, 52.0);
+    }
+
+    #[test]
+    #[serial]
+    fn newer_statusline_rate_limits_override_the_claude_cache() {
+        let dir = tempfile::tempdir().unwrap();
+        env::set_var("CCM_HOME", dir.path());
+        crate::store::add_profile("work", crate::store::ProfileKind::Subscription).unwrap();
+        let profile = crate::store::profile_dir("work").unwrap();
+        std::fs::write(
+            profile.join(".claude.json"),
+            r#"{"cachedUsageUtilization":{"fetchedAtMs":100,"utilization":{"five_hour":{"utilization":10,"resets_at":"2026-07-23T06:00:00Z"},"seven_day":{"utilization":20,"resets_at":"2026-07-28T19:00:00Z"}}}}"#,
+        )
+        .unwrap();
+        std::fs::create_dir_all(profile.join(".oreodeck")).unwrap();
+        std::fs::write(
+            profile.join(".oreodeck").join("rate-limits.json"),
+            r#"{"capturedAtMs":200,"fiveHour":{"utilization":31,"resetAtMs":300},"sevenDay":{"utilization":42,"resetAtMs":400}}"#,
+        )
+        .unwrap();
+
+        let usage = read_claude_plan_usage("work").unwrap();
+        env::remove_var("CCM_HOME");
+        assert_eq!(usage.fetched_at, 200);
+        assert_eq!(usage.five_hour.unwrap().utilization, 31.0);
+        assert_eq!(usage.seven_day.unwrap().reset_at, Some(400));
     }
 
     /// Regression: the transcript walker must use `DirEntry::file_type()`

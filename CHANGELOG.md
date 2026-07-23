@@ -7,6 +7,18 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added a per-profile status-line proxy that captures Claude's live
+  `rate_limits` after each API response and forwards the original status-line
+  output unchanged.
+
+### Changed
+
+- `ord status` and the native app now prefer the newest near-realtime
+  status-line usage snapshot, while retaining Claude's account cache as a
+  fallback when no profile session is active.
+
 ## [0.1.8] - 2026-07-23
 
 ### Changed

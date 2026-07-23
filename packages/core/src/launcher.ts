@@ -4,6 +4,7 @@ import { getApiKey } from "./keychain";
 import { getProfile, type Profile } from "./profile-store";
 import { syncSharedConfiguration } from "./shared-config";
 import { ensureBuiltinOreoDeckSkill } from "./builtin-skills";
+import { ensureUsageStatuslineProxy } from "./statusline-proxy";
 
 export interface LaunchResult {
   code: number;
@@ -20,6 +21,7 @@ export async function buildEnv(
 ): Promise<NodeJS.ProcessEnv> {
   await syncSharedConfiguration(profile.name, profile.sharedResources ?? []);
   await ensureBuiltinOreoDeckSkill(profile.name);
+  await ensureUsageStatuslineProxy(profile.name);
   const env: NodeJS.ProcessEnv = { ...base };
   env.CLAUDE_CONFIG_DIR = profileDir(profile.name);
   if (profile.kind === "api-key") {

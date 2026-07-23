@@ -257,6 +257,13 @@ and other Claude sessions on the same account. Run `/usage` inside Claude to
 refresh that account's cache. OreoDeck displays the cache age instead of
 presenting stale data as live.
 
+When a profile is launched through OreoDeck, a transparent status-line proxy
+captures Claude's `rate_limits` after each API response. It preserves the
+existing status-line output and stores no OAuth credentials. `ord status` and
+the app prefer this near-realtime snapshot, then fall back to Claude's account
+cache when no session is active. Start a new profile session once after an
+OreoDeck update to install the proxy.
+
 Configure failover:
 
 ```bash
