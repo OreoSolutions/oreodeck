@@ -1,6 +1,6 @@
 [package]
 name = "ccm-core"
-version = "0.1.8"
+version = "0.1.9"
 description = "OreoDeck core — profile store, usage, keychain, terminal, and UniFFI library"
 license = "Apache-2.0"
 repository = "https://github.com/OreoSolutions/oreodeck"
