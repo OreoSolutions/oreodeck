@@ -1,5 +1,7 @@
 # Security policy
 
+English | [Tiếng Việt](SECURITY.vi.md) | [简体中文](SECURITY.zh-CN.md)
+
 ## Supported versions
 
 Security fixes are provided for the latest released version of OreoDeck.

@@ -1,5 +1,7 @@
 # OreoDeck
 
+English | [Tiếng Việt](README.vi.md) | [简体中文](README.zh-CN.md)
+
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![macOS](https://img.shields.io/badge/macOS-15%2B-black.svg)](https://www.apple.com/macos/)
 

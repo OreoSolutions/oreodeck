@@ -1,5 +1,7 @@
 # Contributing to OreoDeck
 
+English | [Tiếng Việt](CONTRIBUTING.vi.md) | [简体中文](CONTRIBUTING.zh-CN.md)
+
 Thank you for helping improve OreoDeck.
 
 ## Before opening a pull request
