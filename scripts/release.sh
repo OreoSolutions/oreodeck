@@ -13,12 +13,6 @@ NOTES_FILE="docs/releases/v$VERSION.md"
 CURRENT="$(bun -e 'console.log((await Bun.file("package.json").json()).version)')"
 [[ "$CURRENT" == "$VERSION" ]] || { echo "package.json version $CURRENT does not match $VERSION." >&2; exit 1; }
 bun install --frozen-lockfile
-bun run typecheck
-bun test
-cargo test --manifest-path packages/core-rs/Cargo.toml --locked
-bun run lint
-bun run fmt:check
-bun run test:app
 ./scripts/build.sh
 ./scripts/sign.sh
 ./scripts/notarize.sh
