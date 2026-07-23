@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addProfile, loadConfig, updateConfig } from "./profile-store";
 import { getSharedResources, setSharedResources } from "./shared";
+import { syncSharedConfiguration } from "./shared-config";
 import { profileDir } from "./paths";
 
 let root: string;
@@ -92,4 +93,38 @@ test("shares plugin activation and MCP config without replacing isolated config 
   await setSharedResources("work", []);
   expect(JSON.parse(await readFile(join(profileDir("work"), "settings.json"), "utf8"))).toEqual({ theme: "light" });
   expect(JSON.parse(await readFile(join(profileDir("work"), ".claude.json"), "utf8"))).toEqual({ oauthAccount: "profile-secret" });
+});
+
+test("automatically adds a newly configured global Exa MCP server on refresh", async () => {
+  await writeFile(
+    join(root, ".claude.json"),
+    JSON.stringify({ mcpServers: { docs: { command: "docs" } }, oauthAccount: "global-secret" }),
+  );
+  await writeFile(
+    join(profileDir("work"), ".claude.json"),
+    JSON.stringify({ oauthAccount: "profile-secret" }),
+  );
+  await setSharedResources("work", ["mcp"]);
+
+  await writeFile(
+    join(root, ".claude.json"),
+    JSON.stringify({
+      mcpServers: {
+        docs: { command: "docs" },
+        exa: { type: "http", url: "https://example.invalid/exa-mcp" },
+      },
+      oauthAccount: "global-secret",
+    }),
+  );
+  await syncSharedConfiguration("work", ["mcp"]);
+
+  const profileState = JSON.parse(
+    await readFile(join(profileDir("work"), ".claude.json"), "utf8"),
+  );
+  expect(profileState.mcpServers.exa).toEqual({
+    type: "http",
+    url: "https://example.invalid/exa-mcp",
+  });
+  expect(profileState.oauthAccount).toBe("profile-secret");
+  expect(JSON.stringify(profileState)).not.toContain("global-secret");
 });
