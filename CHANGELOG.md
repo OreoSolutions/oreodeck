@@ -7,6 +7,13 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added per-profile status-line sharing while preserving isolated settings.
+- Added a clickable version and update-status card to the sidebar footer.
+- Install and uninstall now print the exact shell refresh command whenever
+  they modify OreoDeck integration in `~/.zshrc`.
+
 ## [0.1.1] - 2026-07-23
 
 ### Added

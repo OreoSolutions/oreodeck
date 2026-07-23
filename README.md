@@ -30,8 +30,8 @@ same functionality.
 - Global, per-tab, and one-command profile selection.
 - Interactive session picker for importing and resuming conversations from
   global Claude or another profile.
-- Selective sharing for MCP servers, skills, and plugins without sharing
-  credentials or all profile settings.
+- Selective sharing for MCP servers, skills, plugins, and the Claude status
+  line without sharing credentials or the complete settings file.
 - Five-hour token usage and estimated API cost summaries.
 - Configurable automatic failover order.
 - Native SwiftUI dashboard and menu-bar app.
@@ -187,7 +187,7 @@ Use the arrow keys to move, Space to select, and Enter to confirm. Configure
 the same resources non-interactively with:
 
 ```bash
-ord shared set work mcp skills plugins
+ord shared set work mcp skills plugins statusline.sh
 ord shared show work
 ord shared clear work
 ```
@@ -207,6 +207,8 @@ Sharing remains selective:
 - Plugin activation copies only `enabledPlugins` and
   `extraKnownMarketplaces` into the isolated settings file.
 - MCP sharing copies only `mcpServers` into the isolated Claude state file.
+- Status-line sharing links `statusline.sh` and copies only the `statusLine`
+  field into the isolated profile settings file.
 - OAuth credentials, API keys, projects, history, and unrelated settings remain
   private to each profile.
 - Disabling sharing restores the profile's original configuration values.

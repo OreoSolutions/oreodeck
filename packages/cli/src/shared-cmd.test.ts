@@ -13,6 +13,8 @@ beforeEach(async () => {
   process.env.CCM_HOME = join(root, "ccm");
   process.env.CCM_GLOBAL_CLAUDE_HOME = join(root, "global");
   await mkdir(join(root, "global", "skills"), { recursive: true });
+  await writeFile(join(root, "global", "settings.json"), JSON.stringify({ statusLine: { type: "command", command: "statusline.sh" } }));
+  await writeFile(join(root, "global", "statusline.sh"), "#!/bin/sh\n");
   await addProfile("work", "subscription");
 });
 
@@ -46,7 +48,13 @@ test("shared set rejects sensitive resources", async () => {
   expect(result.stderr).toContain("Unsupported shared resource");
   const settings = await run("shared", "set", "work", "settings.json");
   expect(settings.code).toBe(1);
-  expect(settings.stderr).toContain("Allowed: mcp, skills, plugins");
+  expect(settings.stderr).toContain("Allowed: mcp, skills, plugins, statusline.sh");
+});
+
+test("shared set supports the global status line without sharing settings.json", async () => {
+  const result = await run("shared", "set", "work", "statusline.sh");
+  expect(result.code).toBe(0);
+  expect((await run("shared", "show", "work")).stdout.trim()).toBe("statusline.sh");
 });
 
 test("interactive choices disable existing local paths and missing global sources", async () => {

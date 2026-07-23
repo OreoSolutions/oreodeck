@@ -5,7 +5,7 @@ import { loadConfig, updateConfig } from "./profile-store";
 import { syncSharedConfiguration } from "./shared-config";
 
 export const SHARED_RESOURCES = [
-  "mcp", "skills", "plugins",
+  "mcp", "skills", "plugins", "statusline.sh",
 ] as const;
 
 const LEGACY_SHARED_RESOURCES = [

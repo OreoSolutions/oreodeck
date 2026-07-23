@@ -63,6 +63,26 @@ test("rejects resources outside the security allowlist", async () => {
   await expect(setSharedResources("work", ["CLAUDE.md"])).rejects.toThrow("Unsupported shared resource");
 });
 
+test("shares the status line script and only its settings field", async () => {
+  await mkdir(globalRoot, { recursive: true });
+  await writeFile(join(globalRoot, "statusline.sh"), "#!/bin/sh\necho global\n");
+  await writeFile(join(globalRoot, "settings.json"), JSON.stringify({
+    statusLine: { type: "command", command: "~/.claude/statusline.sh" },
+    theme: "global",
+  }));
+  await writeFile(join(profileDir("work"), "settings.json"), JSON.stringify({ theme: "profile" }));
+
+  await setSharedResources("work", ["statusline.sh"]);
+  expect((await lstat(join(profileDir("work"), "statusline.sh"))).isSymbolicLink()).toBe(true);
+  expect(JSON.parse(await readFile(join(profileDir("work"), "settings.json"), "utf8"))).toEqual({
+    theme: "profile",
+    statusLine: { type: "command", command: "~/.claude/statusline.sh" },
+  });
+
+  await setSharedResources("work", []);
+  expect(JSON.parse(await readFile(join(profileDir("work"), "settings.json"), "utf8"))).toEqual({ theme: "profile" });
+});
+
 test("removes legacy shared resources while accepting only the narrowed allowlist", async () => {
   const source = join(globalRoot, "CLAUDE.md");
   const destination = join(profileDir("work"), "CLAUDE.md");

@@ -85,6 +85,31 @@ public struct DashboardView: View {
 
                 Spacer()
 
+                Button {
+                    section = .settings
+                    Task { await model.checkForUpdates() }
+                } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("OreoDeck")
+                            .font(.headline)
+                        HStack(spacing: 7) {
+                            Text("v\(model.currentVersion)")
+                            Image(systemName: updateStatusIcon)
+                                .foregroundStyle(updateStatusColor)
+                            Text(updateStatusText)
+                        }
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    }
+                    .padding(11)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(OreoTheme.card.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .focusable(false)
+                .help("Open update settings")
+
                 HStack(spacing: 7) {
                     Circle().fill(model.cliMissing ? Color.orange : OreoTheme.cyan)
                         .frame(width: 7, height: 7)
@@ -115,5 +140,19 @@ public struct DashboardView: View {
             .background(OreoTheme.canvas)
         }
         .frame(minWidth: 920, minHeight: 620)
+    }
+
+    private var updateStatusText: String {
+        if model.checkingForUpdate { return "Checking…" }
+        if let update = model.availableUpdate { return "v\(update.version) available" }
+        return "Up to date"
+    }
+
+    private var updateStatusIcon: String {
+        model.availableUpdate == nil ? "checkmark.circle.fill" : "arrow.down.circle.fill"
+    }
+
+    private var updateStatusColor: Color {
+        model.availableUpdate == nil ? .green : .orange
     }
 }

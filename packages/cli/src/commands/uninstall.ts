@@ -23,12 +23,12 @@ function installPaths() {
   };
 }
 
-async function removeShellIntegration(path: string): Promise<void> {
+async function removeShellIntegration(path: string): Promise<boolean> {
   let contents: string;
   try {
     contents = await readFile(path, "utf8");
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
   }
 
@@ -36,7 +36,9 @@ async function removeShellIntegration(path: string): Promise<void> {
     .replace(/\n?# >>> OreoDeck shell integration v2 >>>[\s\S]*?# <<< OreoDeck shell integration v2 <<<\n?/g, "\n")
     .replace(/\n?# >>> OreoDeck shell integration >>>[\s\S]*?# <<< OreoDeck shell integration <<<\n?/g, "\n")
     .replace(/\n{3,}/g, "\n\n");
-  if (cleaned !== contents) await writeFile(path, cleaned, "utf8");
+  if (cleaned === contents) return false;
+  await writeFile(path, cleaned, "utf8");
+  return true;
 }
 
 async function stopAndRemoveApp(appDir: string): Promise<void> {
@@ -76,7 +78,7 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
   }
 
   const paths = installPaths();
-  await removeShellIntegration(paths.zshrc);
+  const shellIntegrationRemoved = await removeShellIntegration(paths.zshrc);
   await stopAndRemoveApp(paths.appDir);
   await rm(join(paths.binDir, "oreodeck"), { force: true });
   await rm(join(paths.binDir, "ord"), { force: true });
@@ -85,5 +87,9 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
   console.log(opts.purge
     ? "OreoDeck and all profile data were removed."
     : `OreoDeck was removed. Profile data is still available at ${ccmHome()}.`);
-  console.log("Open a new Terminal tab to clear the old shell functions.");
+  if (shellIntegrationRemoved) {
+    console.log("Shell integration was removed from ~/.zshrc.");
+    console.log("Open a new Terminal tab, or refresh this tab with:");
+    console.log("unset -f ord oreodeck claude 2>/dev/null; source ~/.zshrc; hash -r");
+  }
 }

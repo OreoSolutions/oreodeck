@@ -18,7 +18,7 @@ OreoDeck cho phép chạy nhiều tài khoản Claude song song, gắn profile t
 - Hỗ trợ profile subscription/OAuth và API key; API key được lưu trong macOS Keychain.
 - Chọn profile global, theo tab hoặc cho một lần chạy.
 - Picker để nhập và tiếp tục session từ Claude global hoặc profile khác.
-- Chia sẻ có chọn lọc MCP, skills và plugins mà không chia sẻ credential hay toàn bộ settings.
+- Chia sẻ có chọn lọc MCP, skills, plugins và status line mà không chia sẻ credential hay toàn bộ settings.
 - Thống kê token trong cửa sổ 5 giờ và ước tính chi phí API.
 - Thứ tự failover tùy chỉnh.
 - Dashboard SwiftUI native và menu-bar app.
@@ -116,13 +116,13 @@ ord shared set work
 Dùng phím mũi tên để di chuyển, Space để chọn và Enter để xác nhận. Chế độ không tương tác:
 
 ```bash
-ord shared set work mcp skills plugins
+ord shared set work mcp skills plugins statusline.sh
 ord shared show work
 ord shared clear work
 ord shared set work skills plugins --force --yes
 ```
 
-Khi force, tài nguyên cũ được backup trong `.oreodeck-backups/shared`. Chỉ MCP, skills, plugins và các trường kích hoạt plugin liên quan được chia sẻ; OAuth, API key, projects, history và settings không liên quan vẫn riêng tư.
+Khi force, tài nguyên cũ được backup trong `.oreodeck-backups/shared`. Status line liên kết `statusline.sh` và chỉ đồng bộ trường `statusLine` cần thiết; toàn bộ `settings.json` không được chia sẻ. OAuth, API key, projects, history và settings không liên quan vẫn riêng tư.
 
 ## Usage và failover
 

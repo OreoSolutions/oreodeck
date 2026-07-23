@@ -134,7 +134,7 @@ pub fn profiles_dir() -> PathBuf {
     ccm_home().join("profiles")
 }
 
-pub const SHARED_RESOURCES: &[&str] = &["mcp", "skills", "plugins"];
+pub const SHARED_RESOURCES: &[&str] = &["mcp", "skills", "plugins", "statusline.sh"];
 
 const LEGACY_SHARED_RESOURCES: &[&str] = &[
     "CLAUDE.md",
@@ -218,6 +218,121 @@ fn is_expected_link(destination: &Path, source: &Path) -> Result<bool, StoreErro
         destination.parent().unwrap_or(Path::new("")).join(target)
     };
     Ok(resolved == source)
+}
+
+fn read_json_object(path: &Path) -> Result<serde_json::Map<String, serde_json::Value>, StoreError> {
+    match fs::read_to_string(path) {
+        Ok(value) => Ok(serde_json::from_str::<serde_json::Value>(&value)
+            .map_err(|_| StoreError::CorruptConfig)?
+            .as_object()
+            .cloned()
+            .unwrap_or_default()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::Map::new()),
+        Err(error) => Err(StoreError::Io(error.to_string())),
+    }
+}
+
+fn sync_json_keys(
+    source_path: &Path,
+    destination_path: &Path,
+    state: &mut serde_json::Map<String, serde_json::Value>,
+    enabled_keys: &[&str],
+) -> Result<(), StoreError> {
+    let source = read_json_object(source_path)?;
+    let mut destination = read_json_object(destination_path)?;
+    let mut managed: Vec<String> = state.keys().cloned().collect();
+    for key in enabled_keys {
+        if !managed.iter().any(|item| item == key) {
+            managed.push((*key).to_string());
+        }
+    }
+
+    for key in managed {
+        if enabled_keys.contains(&key.as_str()) {
+            if !state.contains_key(&key) {
+                let saved = match destination.get(&key) {
+                    Some(value) => serde_json::json!({ "present": true, "value": value }),
+                    None => serde_json::json!({ "present": false }),
+                };
+                state.insert(key.clone(), saved);
+            }
+            match source.get(&key) {
+                Some(value) => {
+                    destination.insert(key, value.clone());
+                }
+                None => {
+                    destination.remove(&key);
+                }
+            }
+        } else if let Some(saved) = state.remove(&key) {
+            if saved.get("present").and_then(serde_json::Value::as_bool) == Some(true) {
+                if let Some(value) = saved.get("value") {
+                    destination.insert(key, value.clone());
+                }
+            } else {
+                destination.remove(&key);
+            }
+        }
+    }
+    write_json_atomic(destination_path, &destination)
+}
+
+/// Native UI equivalent of the TypeScript shared-config refresh. This keeps
+/// configuration-backed resources useful immediately after saving the sheet,
+/// while preserving unrelated profile settings and credentials.
+fn sync_shared_configuration(profile_name: &str, resources: &[String]) -> Result<(), StoreError> {
+    let root = profile_dir(profile_name)?;
+    let state_path = root.join(".oreodeck-shared-state.json");
+    let mut state = read_json_object(&state_path)?;
+    let mut settings_state = state
+        .remove("settings")
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+    let mut claude_state = state
+        .remove("claudeJson")
+        .and_then(|value| value.as_object().cloned())
+        .unwrap_or_default();
+
+    if !resources.iter().any(|resource| resource == "settings.json") {
+        let mut keys = Vec::new();
+        if resources.iter().any(|resource| resource == "plugins") {
+            keys.extend(["enabledPlugins", "extraKnownMarketplaces"]);
+        }
+        if resources.iter().any(|resource| resource == "statusline.sh") {
+            keys.push("statusLine");
+        }
+        sync_json_keys(
+            &global_claude_dir().join("settings.json"),
+            &root.join("settings.json"),
+            &mut settings_state,
+            &keys,
+        )?;
+    }
+
+    let global_state = global_claude_dir()
+        .parent()
+        .unwrap_or(Path::new(""))
+        .join(".claude.json");
+    let mcp_keys: &[&str] = if resources.iter().any(|resource| resource == "mcp") {
+        &["mcpServers"]
+    } else {
+        &[]
+    };
+    sync_json_keys(
+        &global_state,
+        &root.join(".claude.json"),
+        &mut claude_state,
+        mcp_keys,
+    )?;
+    state.insert(
+        "settings".to_string(),
+        serde_json::Value::Object(settings_state),
+    );
+    state.insert(
+        "claudeJson".to_string(),
+        serde_json::Value::Object(claude_state),
+    );
+    write_json_atomic(&state_path, &state)
 }
 
 pub fn set_shared_resources(name: &str, requested: &[String]) -> Result<(), StoreError> {
@@ -327,6 +442,7 @@ fn set_shared_resources_impl(
                 .extra
                 .insert("sharedResources".to_string(), serde_json::json!(resources));
         }
+        sync_shared_configuration(&profile_name, &resources)?;
         save_config(&config)
     })();
 
@@ -799,6 +915,46 @@ mod tests {
             .join("skills")
             .join("local.txt");
         assert_eq!(fs::read_to_string(backup).unwrap(), "keep me");
+        env::remove_var("CCM_GLOBAL_CLAUDE_HOME");
+        env::remove_var("CCM_HOME");
+    }
+
+    #[test]
+    #[serial]
+    fn statusline_sharing_preserves_unrelated_profile_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let global = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        env::set_var("CCM_GLOBAL_CLAUDE_HOME", global.path());
+        fs::write(
+            global.path().join("statusline.sh"),
+            "#!/bin/sh\necho global\n",
+        )
+        .unwrap();
+        fs::write(
+            global.path().join("settings.json"),
+            r#"{"statusLine":{"type":"command","command":"~/.claude/statusline.sh"},"theme":"global"}"#,
+        ).unwrap();
+        add_profile("work", ProfileKind::Subscription).unwrap();
+        let profile_root = profile_dir("work").unwrap();
+        fs::write(profile_root.join("settings.json"), r#"{"theme":"profile"}"#).unwrap();
+
+        set_shared_resources("work", &["statusline.sh".to_string()]).unwrap();
+        assert!(fs::symlink_metadata(profile_root.join("statusline.sh"))
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        let settings: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(profile_root.join("settings.json")).unwrap())
+                .unwrap();
+        assert_eq!(settings["theme"], "profile");
+        assert_eq!(settings["statusLine"]["command"], "~/.claude/statusline.sh");
+
+        set_shared_resources("work", &[]).unwrap();
+        let restored: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(profile_root.join("settings.json")).unwrap())
+                .unwrap();
+        assert_eq!(restored, serde_json::json!({ "theme": "profile" }));
         env::remove_var("CCM_GLOBAL_CLAUDE_HOME");
         env::remove_var("CCM_HOME");
     }

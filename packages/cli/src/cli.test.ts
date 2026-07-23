@@ -122,6 +122,8 @@ test("uninstall removes package files and shell integration but keeps profiles",
   const { stdout, code } = await ccm("uninstall", "--yes");
   expect(code).toBe(0);
   expect(stdout).toContain("Profile data is still available");
+  expect(stdout).toContain("source ~/.zshrc");
+  expect(stdout).toContain("unset -f ord oreodeck claude");
   expect(stat(join(binDir, "ord"))).rejects.toThrow();
   expect(stat(join(appDir, "OreoDeck.app"))).rejects.toThrow();
   expect(stat(join(appDir, "OreoDeck.app.backup-20260723"))).rejects.toThrow();

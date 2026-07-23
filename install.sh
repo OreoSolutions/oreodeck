@@ -166,6 +166,7 @@ esac
 
 echo
 INSTALL_SHELL="${OREODECK_INSTALL_SHELL:-}"
+SHELL_RELOAD_NEEDED=0
 [ -n "$INSTALL_SHELL" ] || prompt_read "$PROMPT_SHELL" INSTALL_SHELL
 INSTALL_SHELL="${INSTALL_SHELL:-Y}"
 case "$INSTALL_SHELL" in
@@ -180,7 +181,7 @@ case "$INSTALL_SHELL" in
         "$BIN_DIR/oreodeck" shell-init
       } >> "$ZSHRC"
       echo "$MSG_SHELL_DONE $ZSHRC"
-      echo "$MSG_SOURCE"
+      SHELL_RELOAD_NEEDED=1
     fi
     ;;
   *)
@@ -190,3 +191,6 @@ esac
 
 echo
 echo "$MSG_START"
+if [ "$SHELL_RELOAD_NEEDED" = "1" ]; then
+  echo "$MSG_SOURCE"
+fi

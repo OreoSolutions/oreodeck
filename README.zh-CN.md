@@ -18,7 +18,7 @@ OreoDeck 支持并行使用多个 Claude 账户、为不同终端标签页固定
 - 支持订阅/OAuth 和 API 密钥配置档案；API 密钥存储在 macOS Keychain 中。
 - 支持全局、每个标签页和单次命令的配置档案选择。
 - 从全局 Claude 或其他配置档案导入并继续会话。
-- 选择性共享 MCP、skills 和 plugins，不共享凭据或全部设置。
+- 选择性共享 MCP、skills、plugins 和状态栏，不共享凭据或完整设置文件。
 - 五小时窗口的 token 用量和 API 成本估算。
 - 可配置的自动故障转移顺序。
 - 原生 SwiftUI 仪表板和菜单栏应用。
@@ -116,13 +116,13 @@ ord shared set work
 使用方向键移动、Space 选择、Enter 确认。非交互模式：
 
 ```bash
-ord shared set work mcp skills plugins
+ord shared set work mcp skills plugins statusline.sh
 ord shared show work
 ord shared clear work
 ord shared set work skills plugins --force --yes
 ```
 
-强制替换前，原资源会备份到 `.oreodeck-backups/shared`。仅共享 MCP、skills、plugins 和相关插件启用字段；OAuth、API 密钥、projects、history 与无关设置保持私有。
+强制替换前，原资源会备份到 `.oreodeck-backups/shared`。状态栏会链接 `statusline.sh`，并仅同步所需的 `statusLine` 字段；不会共享完整的 `settings.json`。OAuth、API 密钥、projects、history 与无关设置保持私有。
 
 ## 用量和故障转移
 

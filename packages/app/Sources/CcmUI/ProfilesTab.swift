@@ -242,7 +242,7 @@ public struct ProfilesTab: View {
 }
 
 struct SharedResourcesSheet: View {
-    static let choices = ["mcp", "skills", "plugins"]
+    static let choices = ["mcp", "skills", "plugins", "statusline.sh"]
 
     @ObservedObject var model: AppModel
     let row: ProfileRow
@@ -261,20 +261,26 @@ struct SharedResourcesSheet: View {
         VStack(alignment: .leading, spacing: 18) {
             OreoModalHeader(
                 title: "Shared resources",
-                subtitle: "Reuse global MCP servers, skills, or plugins in “\(row.name)”. Login and profile settings stay isolated; use `ord sessions` to pick a conversation.",
+                subtitle: "Choose which global Claude resources “\(row.name)” should reuse. Login credentials and conversations always remain isolated.",
                 systemImage: "link"
             )
 
             OreoModalSection {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
                     ForEach(Self.choices, id: \.self) { resource in
-                        Toggle(resource, isOn: Binding(
-                            get: { selected.contains(resource) },
-                            set: { enabled in
-                                if enabled { selected.insert(resource) } else { selected.remove(resource) }
-                            }
-                        ))
-                        .toggleStyle(.checkbox)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Toggle(label(for: resource), isOn: Binding(
+                                get: { selected.contains(resource) },
+                                set: { enabled in
+                                    if enabled { selected.insert(resource) } else { selected.remove(resource) }
+                                }
+                            ))
+                            .toggleStyle(.checkbox)
+                            Text(description(for: resource))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, 20)
+                        }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 4)
                     }
@@ -329,6 +335,26 @@ struct SharedResourcesSheet: View {
             }
             isSaving = false
             if model.actionError == nil { dismiss() }
+        }
+    }
+
+    private func label(for resource: String) -> String {
+        switch resource {
+        case "mcp": "MCP servers"
+        case "skills": "Skills"
+        case "plugins": "Plugins"
+        case "statusline.sh": "Status line"
+        default: resource
+        }
+    }
+
+    private func description(for resource: String) -> String {
+        switch resource {
+        case "mcp": "Global server definitions"
+        case "skills": "Global skill directory"
+        case "plugins": "Plugins and activation state"
+        case "statusline.sh": "Script and statusLine configuration"
+        default: ""
         }
     }
 }
