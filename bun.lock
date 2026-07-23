@@ -11,10 +11,11 @@
       },
     },
     "packages/cli": {
-      "name": "@ccm/cli",
+      "name": "@oreodeck/cli",
       "version": "0.1.0",
       "bin": {
-        "ccm": "./src/index.ts",
+        "oreodeck": "./src/index.ts",
+        "ord": "./src/index.ts",
       },
       "dependencies": {
         "@ccm/core": "workspace:*",
@@ -31,11 +32,11 @@
     },
   },
   "packages": {
-    "@ccm/cli": ["@ccm/cli@workspace:packages/cli"],
-
     "@ccm/contract-fixtures": ["@ccm/contract-fixtures@workspace:packages/contract-fixtures"],
 
     "@ccm/core": ["@ccm/core@workspace:packages/core"],
+
+    "@oreodeck/cli": ["@oreodeck/cli@workspace:packages/cli"],
 
     "@types/node": ["@types/node@22.20.1", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q=="],
 

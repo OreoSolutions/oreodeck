@@ -21,4 +21,6 @@ ditto -c -k --sequesterRsrc --keepParent "$STAGE/$NAME" "dist/$NAME.zip"
 (cd dist && shasum -a 256 "$NAME.zip" > "$NAME.zip.sha256")
 cp "dist/$NAME.zip" "dist/oreodeck-macos-$ARCH.zip"
 (cd dist && shasum -a 256 "oreodeck-macos-$ARCH.zip" > "oreodeck-macos-$ARCH.zip.sha256")
+(cd dist && shasum -a 256 -c "$NAME.zip.sha256")
+(cd dist && shasum -a 256 -c "oreodeck-macos-$ARCH.zip.sha256")
 echo "Created versioned and stable release ZIPs in dist/."
