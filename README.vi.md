@@ -4,6 +4,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![macOS](https://img.shields.io/badge/macOS-15%2B-black.svg)](https://www.apple.com/macos/)
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/nguyenhuyquang)
 
 <p align="center"><img src="packages/app/Resources/OreoDeck.png" alt="Logo OreoDeck" width="128"></p>
 
@@ -175,6 +176,10 @@ ord uninstall --purge  # xóa toàn bộ dữ liệu OreoDeck
 ```
 
 `--purge` không thể hoàn tác. Cả hai lệnh đều hỏi xác nhận; chỉ dùng `--yes` trong automation sau khi đã kiểm tra phạm vi.
+
+## Ủng hộ OreoDeck
+
+OreoDeck miễn phí và mã nguồn mở. Nếu ứng dụng giúp bạn tiết kiệm thời gian, bạn có thể [mời tác giả một ly cà phê trên Ko-fi](https://ko-fi.com/nguyenhuyquang) để ủng hộ quá trình phát triển. ☕
 
 ## Changelog và giấy phép
 

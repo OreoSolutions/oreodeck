@@ -37,4 +37,6 @@ import ViewInspector
     #expect(try view.inspect().find(text: "Rio").string() == "Rio")
     #expect(try view.inspect().find(text: "Wave Terminal").string() == "Wave Terminal")
     #expect(try view.inspect().find(text: "Test terminal").string() == "Test terminal")
+    #expect(try view.inspect().find(text: "Support OreoDeck").string() == "Support OreoDeck")
+    #expect(try view.inspect().find(text: "Support on Ko-fi").string() == "Support on Ko-fi")
 }

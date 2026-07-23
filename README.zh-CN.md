@@ -4,6 +4,7 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![macOS](https://img.shields.io/badge/macOS-15%2B-black.svg)](https://www.apple.com/macos/)
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/nguyenhuyquang)
 
 <p align="center"><img src="packages/app/Resources/OreoDeck.png" alt="OreoDeck 标志" width="128"></p>
 
@@ -175,6 +176,10 @@ ord uninstall --purge  # 删除所有 OreoDeck 数据
 ```
 
 `--purge` 无法撤销。两个命令都会请求确认；仅在已经审查删除范围的自动化中使用 `--yes`。
+
+## 支持 OreoDeck
+
+OreoDeck 是免费开源软件。如果它为你节省了时间，你可以在 [Ko-fi 上请作者喝杯咖啡](https://ko-fi.com/nguyenhuyquang)，支持项目继续开发。☕
 
 ## 更新日志与许可证
 

@@ -4,6 +4,7 @@ English | [Tiếng Việt](README.vi.md) | [简体中文](README.zh-CN.md)
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![macOS](https://img.shields.io/badge/macOS-15%2B-black.svg)](https://www.apple.com/macos/)
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/nguyenhuyquang)
 
 <p align="center">
   <img src="packages/app/Resources/OreoDeck.png" alt="OreoDeck logo" width="128">
@@ -325,6 +326,11 @@ only in automation where the removal scope has already been reviewed.
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
+## Support OreoDeck
+
+OreoDeck is free and open-source. If it saves you time, you can support its
+continued development by [buying the author a coffee on Ko-fi](https://ko-fi.com/nguyenhuyquang). ☕
 
 ## License
 

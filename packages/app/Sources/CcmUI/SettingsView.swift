@@ -17,6 +17,8 @@ private struct TerminalOption: Identifiable {
 }
 
 public struct SettingsView: View {
+    private static let sponsorsURL = URL(string: "https://ko-fi.com/nguyenhuyquang")!
+
     @ObservedObject private var model: AppModel
 
     private let terminals = [
@@ -204,6 +206,34 @@ public struct SettingsView: View {
                                 .buttonStyle(OreoPrimaryButtonStyle())
                             }
                         }
+                    }
+                }
+
+                OreoCard {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.pink.opacity(0.12))
+                            Image(systemName: "heart.fill")
+                                .font(.title3)
+                                .foregroundStyle(.pink)
+                        }
+                        .frame(width: 46, height: 46)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Support OreoDeck").font(.headline)
+                            Text("OreoDeck is free and open-source. Your support helps keep it maintained and improving.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Link(destination: Self.sponsorsURL) {
+                            Label("Support on Ko-fi", systemImage: "cup.and.saucer.fill")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.pink)
                     }
                 }
             }
