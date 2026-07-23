@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { existsSync } from "node:fs";
 
 /**
  * Thư mục gốc chứa mọi dữ liệu của ccm. CCM_HOME cho phép override (dùng khi
@@ -18,13 +19,24 @@ import { isAbsolute, join, resolve } from "node:path";
  * mà không làm bể lệnh của người dùng.
  */
 export function ccmHome(): string {
-  const override = process.env.CCM_HOME?.trim();
-  if (!override) return join(homedir(), ".ccm");
+  const override = process.env.OREODECK_HOME?.trim() || process.env.CCM_HOME?.trim();
+  if (!override) {
+    const current = join(homedir(), ".oreodeck");
+    const legacy = join(homedir(), ".ccm");
+    return existsSync(current) || !existsSync(legacy) ? current : legacy;
+  }
   return isAbsolute(override) ? override : resolve(override);
 }
 
 export function profilesDir(): string {
   return join(ccmHome(), "profiles");
+}
+
+export function globalClaudeDir(): string {
+  const override = process.env.OREODECK_GLOBAL_CLAUDE_HOME?.trim()
+    || process.env.CCM_GLOBAL_CLAUDE_HOME?.trim();
+  if (!override) return join(homedir(), ".claude");
+  return isAbsolute(override) ? override : resolve(override);
 }
 
 /** Tên profile thành tên thư mục, nên phải chặn path traversal. */
@@ -59,6 +71,10 @@ export function profileDir(name: string): string {
 
 export function configPath(): string {
   return join(ccmHome(), "config.json");
+}
+
+export function configLockPath(): string {
+  return join(ccmHome(), ".config.lock");
 }
 
 export function sessionsPath(): string {

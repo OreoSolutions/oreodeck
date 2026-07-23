@@ -13,10 +13,12 @@ let dir: string;
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "ccm-store-"));
   process.env.CCM_HOME = dir;
+  delete process.env.OREODECK_PROFILE;
 });
 
 afterEach(async () => {
   delete process.env.CCM_HOME;
+  delete process.env.OREODECK_PROFILE;
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -24,6 +26,13 @@ test("loadConfig returns defaults when no file exists", async () => {
   expect(await loadConfig()).toEqual({
     profiles: [], active: null, failoverEnabled: true, failoverOrder: [],
   });
+});
+
+test("loadConfig rejects valid JSON with an invalid runtime shape", async () => {
+  await writeFile(join(dir, "config.json"), JSON.stringify({
+    profiles: null, active: null, failoverEnabled: true, failoverOrder: [],
+  }));
+  await expect(loadConfig()).rejects.toThrow("invalid structure");
 });
 
 test("addProfile persists the profile and creates its config dir", async () => {
@@ -44,10 +53,31 @@ test("second added profile does not steal active", async () => {
   expect((await loadConfig()).active).toBe("work");
 });
 
+test("tab profile overrides the global active profile", async () => {
+  await addProfile("work", "subscription");
+  await addProfile("personal", "subscription");
+  process.env.OREODECK_PROFILE = "personal";
+  expect(await resolveProfileName()).toBe("personal");
+});
+
+test("explicit -P profile overrides the tab profile", async () => {
+  await addProfile("work", "subscription");
+  await addProfile("personal", "subscription");
+  process.env.OREODECK_PROFILE = "personal";
+  expect(await resolveProfileName("work")).toBe("work");
+});
+
 test("addProfile appends to failoverOrder", async () => {
   await addProfile("work", "subscription");
   await addProfile("personal", "subscription");
   expect((await loadConfig()).failoverOrder).toEqual(["work", "personal"]);
+});
+
+test("concurrent profile additions do not lose either update", async () => {
+  await Promise.all([addProfile("work", "subscription"), addProfile("personal", "subscription")]);
+  const c = await loadConfig();
+  expect(c.profiles.map((p) => p.name).sort()).toEqual(["personal", "work"]);
+  expect(c.failoverOrder.slice().sort()).toEqual(["personal", "work"]);
 });
 
 test("addProfile rejects a duplicate name", async () => {

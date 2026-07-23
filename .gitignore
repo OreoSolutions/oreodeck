@@ -1,8 +1,11 @@
 .superpowers/
+.codegraph/
 node_modules/
 dist/
 *.log
 .DS_Store
+*.p8
+*.p12
 target/
 # uniffi bindgen output — sinh lại bằng packages/app/scripts/generate.sh
 packages/core-rs/Generated/

@@ -1,14 +1,24 @@
 import { expect, test, afterEach } from "bun:test";
 import { isAbsolute } from "node:path";
+import { join } from "node:path";
+import { homedir } from "node:os";
+import { existsSync } from "node:fs";
 import { assertValidName, ccmHome, profileDir, configPath } from "./paths";
 
 afterEach(() => {
   delete process.env.CCM_HOME;
+  delete process.env.OREODECK_HOME;
 });
 
-test("ccmHome defaults to ~/.ccm", () => {
+function expectedDefaultHome(): string {
+  const current = join(homedir(), ".oreodeck");
+  const legacy = join(homedir(), ".ccm");
+  return existsSync(current) || !existsSync(legacy) ? current : legacy;
+}
+
+test("ccmHome defaults to the current home while preserving a legacy install", () => {
   delete process.env.CCM_HOME;
-  expect(ccmHome()).toBe(`${process.env.HOME}/.ccm`);
+  expect(ccmHome()).toBe(expectedDefaultHome());
 });
 
 test("ccmHome respects CCM_HOME override", () => {
@@ -18,7 +28,7 @@ test("ccmHome respects CCM_HOME override", () => {
 
 test("ccmHome treats an empty CCM_HOME as unset", () => {
   process.env.CCM_HOME = "";
-  expect(ccmHome()).toBe(`${process.env.HOME}/.ccm`);
+  expect(ccmHome()).toBe(expectedDefaultHome());
 });
 
 test("ccmHome resolves a relative CCM_HOME to an absolute path under CWD", () => {
@@ -29,22 +39,22 @@ test("ccmHome resolves a relative CCM_HOME to an absolute path under CWD", () =>
 
 test("ccmHome treats a whitespace-only CCM_HOME as unset", () => {
   process.env.CCM_HOME = " ";
-  expect(ccmHome()).toBe(`${process.env.HOME}/.ccm`);
+  expect(ccmHome()).toBe(expectedDefaultHome());
 });
 
 test("ccmHome treats a tab-only CCM_HOME as unset", () => {
   process.env.CCM_HOME = "\t";
-  expect(ccmHome()).toBe(`${process.env.HOME}/.ccm`);
+  expect(ccmHome()).toBe(expectedDefaultHome());
 });
 
 test("ccmHome treats a newline-only CCM_HOME as unset", () => {
   process.env.CCM_HOME = "\n";
-  expect(ccmHome()).toBe(`${process.env.HOME}/.ccm`);
+  expect(ccmHome()).toBe(expectedDefaultHome());
 });
 
 test("ccmHome treats a mixed-whitespace CCM_HOME as unset", () => {
   process.env.CCM_HOME = "  \t\n  ";
-  expect(ccmHome()).toBe(`${process.env.HOME}/.ccm`);
+  expect(ccmHome()).toBe(expectedDefaultHome());
 });
 
 test("ccmHome trims surrounding whitespace from an otherwise valid relative CCM_HOME", () => {

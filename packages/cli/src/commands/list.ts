@@ -3,7 +3,7 @@ import { loadConfig } from "@ccm/core";
 export async function listCommand(): Promise<void> {
   const c = await loadConfig();
   if (c.profiles.length === 0) {
-    console.log("No profiles yet. Create one with `ccm add <name>`.");
+    console.log("No profiles yet. Create one with `oreodeck add <name>`.");
     return;
   }
   for (const p of c.profiles) {

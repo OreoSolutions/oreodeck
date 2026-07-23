@@ -7,7 +7,7 @@ interface RemoveOptions {
 
 export async function removeCommand(name: string, opts: RemoveOptions): Promise<void> {
   if (!(await getProfile(name))) {
-    throw new Error(`Profile "${name}" not found. Run \`ccm list\` to see profiles.`);
+    throw new Error(`Profile "${name}" not found. Run \`oreodeck list\` to see profiles.`);
   }
   if (!opts.yes) {
     const ok = await promptConfirm(

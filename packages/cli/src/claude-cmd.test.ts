@@ -39,6 +39,13 @@ test("claude runs with the active profile's config dir", async () => {
   expect(stdout).toContain(`CLAUDE_CONFIG_DIR=${profileDir("work")}`);
 });
 
+test("run is the primary OreoDeck command", async () => {
+  await addProfile("work", "subscription");
+  const { stdout, code } = await ccm("run");
+  expect(code).toBe(0);
+  expect(stdout).toContain(profileDir("work"));
+});
+
 test("claude -P overrides the active profile", async () => {
   await addProfile("work", "subscription");
   await addProfile("personal", "subscription");
@@ -58,7 +65,10 @@ test("claude propagates the child's exit code", async () => {
     env: { ...process.env, CCM_HOME: dir, CCM_CLAUDE_BIN: FAKE, FAKE_CLAUDE_EXIT: "7" },
     stdout: "pipe",
     stderr: "pipe",
+    stdin: "pipe",
   });
+  proc.stdin.write("n\n");
+  proc.stdin.end();
   expect(await proc.exited).toBe(7);
 });
 
@@ -132,7 +142,7 @@ test("interactive claude on a clean exit launches once and never prompts", async
   expect(stdout.match(/ARGS=/g)?.length).toBe(1);
 });
 
-test("interactive claude on a non-zero exit prompts, and declining does not relaunch", async () => {
+test("interactive claude does not treat an arbitrary non-zero exit as a rate limit", async () => {
   await addProfile("work", "subscription");
   await addProfile("personal", "subscription");
   const LIMITED = join(import.meta.dir, "..", "test", "fake-claude-limited.sh");
@@ -150,8 +160,30 @@ test("interactive claude on a non-zero exit prompts, and declining does not rela
   ]);
   // Declining keeps the child's own exit code (1) rather than a hardcoded value.
   expect(code).toBe(1);
-  expect(stdout).toContain('Continue this conversation on "personal"?');
+  expect(stdout).toContain('Confirm a usage limit and continue this conversation on "personal"?');
   // fake-claude-limited.sh's rate-limit line appears exactly once — no retry launch.
   expect(stdout.match(/Claude usage limit reached/g)?.length).toBe(1);
   expect(stdout).not.toContain("OK from personal");
+});
+
+test("interactive claude asks for failover only after the user confirms a usage limit", async () => {
+  await addProfile("work", "subscription");
+  await addProfile("personal", "subscription");
+  const LIMITED = join(import.meta.dir, "..", "test", "fake-claude-limited.sh");
+  const proc = Bun.spawn(["bun", CLI, "claude", "-P", "work"], {
+    env: { ...process.env, CCM_HOME: dir, CCM_CLAUDE_BIN: LIMITED },
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  proc.stdin.write("y\n");
+  proc.stdin.end();
+  const [stdout, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    proc.exited,
+  ]);
+  expect(code).toBe(0);
+  expect(stdout).toContain('Confirm a usage limit and continue this conversation on "personal"?');
+  expect(stdout.match(/Claude usage limit reached/g)?.length).toBe(1);
+  expect(stdout).toContain("OK from personal");
 });

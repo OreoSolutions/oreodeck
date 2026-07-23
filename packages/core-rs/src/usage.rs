@@ -47,26 +47,53 @@ struct Price {
 }
 
 /// USD/1M token. Model lạ ⇒ None ⇒ cost 0. Khớp bảng PRICING trong usage.ts.
-fn pricing(model: &str) -> Option<Price> {
-    match model {
-        "claude-opus-4-8" => Some(Price {
+const SONNET_5_INTRO_END_MS: i64 = 1_788_220_800_000;
+
+fn pricing(model: &str, timestamp: i64) -> Option<Price> {
+    if matches!(
+        model,
+        "claude-opus-4-8" | "claude-opus-4-7" | "claude-opus-4-6"
+    ) || model.starts_with("claude-opus-4-5-")
+    {
+        return Some(Price {
             input: 5.0,
             output: 25.0,
-        }),
-        "claude-sonnet-5" => Some(Price {
+        });
+    }
+    if model == "claude-sonnet-5" {
+        return Some(if timestamp < SONNET_5_INTRO_END_MS {
+            Price {
+                input: 2.0,
+                output: 10.0,
+            }
+        } else {
+            Price {
+                input: 3.0,
+                output: 15.0,
+            }
+        });
+    }
+    if matches!(model, "claude-sonnet-4-6" | "claude-sonnet-4-5")
+        || model.starts_with("claude-sonnet-4-5-")
+    {
+        return Some(Price {
             input: 3.0,
             output: 15.0,
-        }),
-        "claude-haiku-4-5" => Some(Price {
+        });
+    }
+    if model == "claude-haiku-4-5" || model.starts_with("claude-haiku-4-5-") {
+        return Some(Price {
             input: 1.0,
             output: 5.0,
-        }),
-        "claude-fable-5" => Some(Price {
+        });
+    }
+    if model == "claude-fable-5" {
+        return Some(Price {
             input: 10.0,
             output: 50.0,
-        }),
-        _ => None,
+        });
     }
+    None
 }
 
 /// Khớp num() của usage.ts: số hữu hạn thì lấy, còn lại 0.
@@ -121,7 +148,7 @@ pub fn parse_transcript_line(line: &str) -> Option<UsageEntry> {
 /// Cache multipliers áp lên giá INPUT, không bao giờ output. Khớp
 /// estimateCostUsd() của usage.ts.
 pub fn estimate_cost_usd(e: &UsageEntry) -> f64 {
-    let p = match pricing(&e.model) {
+    let p = match pricing(&e.model, e.timestamp) {
         Some(p) => p,
         None => return 0.0,
     };
@@ -267,6 +294,19 @@ mod tests {
         let mut e = opus("input", 1_000_000);
         e.model = "future-model-x".to_string();
         approx(estimate_cost_usd(&e), 0.0);
+    }
+
+    #[test]
+    fn cost_recognizes_current_and_dated_model_ids() {
+        let mut e = opus("input", 1_000_000);
+        e.model = "claude-sonnet-4-6".to_string();
+        approx(estimate_cost_usd(&e), 3.0);
+        e.model = "claude-haiku-4-5-20251001".to_string();
+        approx(estimate_cost_usd(&e), 1.0);
+        e.model = "claude-sonnet-5".to_string();
+        approx(estimate_cost_usd(&e), 2.0);
+        e.timestamp = SONNET_5_INTRO_END_MS;
+        approx(estimate_cost_usd(&e), 3.0);
     }
 
     #[test]

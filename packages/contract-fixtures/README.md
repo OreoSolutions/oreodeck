@@ -93,7 +93,7 @@ Every field in `expected-usage.json` and its meaning:
   ```
   where `input_rate` and `output_rate` (in USD per 1M tokens) come from the pricing table:
   - `claude-opus-4-8`: input 5, output 25
-  - `claude-sonnet-5`: input 3, output 15
+  - `claude-sonnet-5`: input 2, output 10 (introductory price through 2026-08-31)
   - `claude-haiku-4-5`: input 1, output 5
   - `claude-fable-5`: input 10, output 50
   - Unknown model (e.g., `future-model-x`): cost 0 (not in table)

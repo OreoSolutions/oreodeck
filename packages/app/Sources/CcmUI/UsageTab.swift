@@ -76,6 +76,12 @@ public struct UsageTab: View {
     public var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                PageHeader(
+                    eyebrow: "Five-hour window",
+                    title: "Usage overview",
+                    subtitle: "Compare token composition, estimated API cost and reset timing.",
+                    systemImage: "chart.bar.xaxis"
+                )
                 if let loadError = model.loadError {
                     // Must come before the `rows.isEmpty` check below: a
                     // config-read failure also leaves `rows` empty (see
@@ -86,10 +92,10 @@ public struct UsageTab: View {
                     // finding).
                     LoadErrorView(model: model, error: loadError)
                 } else if model.rows.isEmpty {
-                    ContentUnavailableView(
-                        "No profiles yet",
+                    OreoEmptyState(
+                        title: "No profiles yet",
+                        message: "Add a profile from Profiles, then launch Claude to start tracking its five-hour window.",
                         systemImage: "chart.bar",
-                        description: Text("Add a profile on the Profiles tab to see its usage here.")
                     )
                 } else {
                     ForEach(model.rows) { row in
@@ -118,6 +124,10 @@ public struct UsageTab: View {
                         }
                     }
                 }
+                CommandSuggestions(model: model, commands: [
+                    CLICommandSuggestion("ord status", "Show the same usage summary in Terminal."),
+                    CLICommandSuggestion("ord run -P <profile> -p \"hello\"", "Run a headless request with explicit profile selection."),
+                ])
             }
             .padding(4)
         }

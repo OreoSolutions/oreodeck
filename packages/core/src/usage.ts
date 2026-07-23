@@ -32,12 +32,26 @@ export interface ProfileUsage {
 }
 
 /** USD per 1M tokens. Cache multipliers below apply to `input`, never `output`. */
-const PRICING: Record<string, { input: number; output: number }> = {
-  "claude-opus-4-8": { input: 5, output: 25 },
-  "claude-sonnet-5": { input: 3, output: 15 },
-  "claude-haiku-4-5": { input: 1, output: 5 },
-  "claude-fable-5": { input: 10, output: 50 },
-};
+const SONNET_5_INTRO_END_MS = Date.parse("2026-09-01T00:00:00Z");
+
+function pricing(model: string, timestamp: number): { input: number; output: number } | undefined {
+  // Published Claude API standard pricing, checked 2026-07-22. Snapshot
+  // suffixes used by pre-4.6 models are accepted as well as their aliases.
+  if (model === "claude-opus-4-8" || model === "claude-opus-4-7" ||
+      model === "claude-opus-4-6" || model.startsWith("claude-opus-4-5-")) {
+    return { input: 5, output: 25 };
+  }
+  if (model === "claude-sonnet-5") {
+    return timestamp < SONNET_5_INTRO_END_MS ? { input: 2, output: 10 } : { input: 3, output: 15 };
+  }
+  if (model === "claude-sonnet-4-6" || model === "claude-sonnet-4-5" ||
+      model.startsWith("claude-sonnet-4-5-")) return { input: 3, output: 15 };
+  if (model === "claude-haiku-4-5" || model.startsWith("claude-haiku-4-5-")) {
+    return { input: 1, output: 5 };
+  }
+  if (model === "claude-fable-5") return { input: 10, output: 50 };
+  return undefined;
+}
 
 const CACHE_WRITE_5M_MULTIPLIER = 1.25;
 const CACHE_WRITE_1H_MULTIPLIER = 2;
@@ -103,7 +117,7 @@ export function parseTranscriptLine(line: string): UsageEntry | null {
  * a discounted (read) or premium (write) rate depending on TTL.
  */
 export function estimateCostUsd(entry: UsageEntry): number {
-  const price = PRICING[entry.model];
+  const price = pricing(entry.model, entry.timestamp);
   if (!price) return 0;
   const cost =
     entry.inputTokens * price.input +

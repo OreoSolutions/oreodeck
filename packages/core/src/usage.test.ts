@@ -171,6 +171,16 @@ test("estimateCostUsd returns 0 for an unknown model", () => {
   expect(cost).toBe(0);
 });
 
+test("estimateCostUsd recognizes current and dated model IDs", () => {
+  expect(estimateCostUsd(entry({ model: "claude-sonnet-4-6", inputTokens: 1_000_000 }))).toBe(3);
+  expect(estimateCostUsd(entry({ model: "claude-haiku-4-5-20251001", outputTokens: 1_000_000 }))).toBe(5);
+  expect(estimateCostUsd(entry({ model: "claude-sonnet-5", inputTokens: 1_000_000 }))).toBe(2);
+  expect(estimateCostUsd(entry({
+    model: "claude-sonnet-5", timestamp: Date.parse("2026-09-01T00:00:00Z"),
+    inputTokens: 1_000_000,
+  }))).toBe(3);
+});
+
 // --- readProfileUsage --------------------------------------------------------
 
 test("readProfileUsage sums every token class inside the 5-hour window and reports totalTokens", async () => {

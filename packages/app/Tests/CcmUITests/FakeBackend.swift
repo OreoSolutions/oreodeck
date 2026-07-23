@@ -11,10 +11,12 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     private var _usage: [ProfileUsageView] = []
     private var _failover = FailoverView(enabled: true, order: [])
     private var _cliInstalled = true
+    private var _terminal = "terminal"
     private var _listError: CcmError?
 
     private(set) var listCallCount = 0
     private(set) var setActiveCalls: [String] = []
+    private(set) var setSharedResourcesCalls: [(name: String, resources: [String])] = []
     private(set) var openSessionCalls: [String] = []
     private(set) var openLoginTerminalCalls: [String] = []
     private(set) var removeCalls: [String] = []
@@ -22,6 +24,8 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     private(set) var setFailoverEnabledCalls: [Bool] = []
     private(set) var setFailoverOrderCalls: [[String]] = []
     private(set) var openConfigCallCount = 0
+    private(set) var setTerminalCalls: [String] = []
+    private(set) var openTerminalCommandCalls: [String] = []
 
     var addApiKeyError: CcmError?
     var removeError: CcmError?
@@ -38,6 +42,7 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     }
     func set(failover: FailoverView) { lock.withLock { _failover = failover } }
     func set(cliInstalled: Bool) { lock.withLock { _cliInstalled = cliInstalled } }
+    func set(terminal: String) { lock.withLock { _terminal = terminal } }
     func set(listError: CcmError?) { lock.withLock { _listError = listError } }
 
     /// Appends a profile as if `ccm add <name>` had just finished a login in
@@ -66,6 +71,19 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
             setActiveCalls.append(name)
             if let setActiveError { throw setActiveError }
         }
+    }
+    func setSharedResources(name: String, resources: [String]) throws {
+        lock.withLock {
+            setSharedResourcesCalls.append((name, resources))
+            if let index = _profiles.firstIndex(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+                let old = _profiles[index]
+                _profiles[index] = ProfileView(
+                    name: old.name, kind: old.kind, active: old.active, sharedResources: resources)
+            }
+        }
+    }
+    func setSharedResourcesForce(name: String, resources: [String]) throws {
+        try setSharedResources(name: name, resources: resources)
     }
     func addApiKeyProfile(name: String, key: String) throws {
         try lock.withLock {
@@ -101,6 +119,13 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
             _failover = FailoverView(enabled: _failover.enabled, order: names)
         }
     }
+    func getTerminal() throws -> String { lock.withLock { _terminal } }
+    func setTerminal(value: String) throws {
+        lock.withLock {
+            setTerminalCalls.append(value)
+            _terminal = value
+        }
+    }
     func openSession(name: String) throws {
         try lock.withLock {
             openSessionCalls.append(name)
@@ -109,6 +134,9 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     }
     func openLoginTerminal(name: String) throws {
         lock.withLock { openLoginTerminalCalls.append(name) }
+    }
+    func openTerminalCommand(command: String) throws {
+        lock.withLock { openTerminalCommandCalls.append(command) }
     }
     func openConfigInEditor() throws { lock.withLock { openConfigCallCount += 1 } }
     func checkCli() -> Bool { lock.withLock { _cliInstalled } }

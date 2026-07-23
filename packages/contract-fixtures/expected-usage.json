@@ -10,7 +10,7 @@
     "cacheReadTokens": 5000,
     "outputTokens": 2000,
     "totalTokens": 24700,
-    "costUsd": 0.09195,
+    "costUsd": 0.0883,
     "resetAtMs": 1784214005000
   }
 }

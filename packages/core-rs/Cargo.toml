@@ -1,7 +1,9 @@
 [package]
 name = "ccm-core"
 version = "0.1.0"
-description = "ccm core — profile store, usage, keychain, terminal (uniffi library)"
+description = "OreoDeck core — profile store, usage, keychain, terminal, and UniFFI library"
+license = "Apache-2.0"
+repository = "https://github.com/OreoSolutions/oreodeck"
 edition = "2021"
 rust-version = "1.80"
 

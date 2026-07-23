@@ -36,8 +36,8 @@ import ViewInspector
     #expect(model.rows.isEmpty)
 
     let tab = ProfilesTab(model: model)
-    let error = try tab.inspect().find(text: "ccm can't read its config")
-    #expect(try error.string() == "ccm can't read its config")
+    let error = try tab.inspect().find(text: "OreoDeck can't read its config")
+    #expect(try error.string() == "OreoDeck can't read its config")
     #expect(throws: (any Error).self) {
         try tab.inspect().find(text: "No profiles yet")
     }
@@ -161,8 +161,8 @@ import ViewInspector
     #expect(model.cliMissing == true)
 
     let tab = ProfilesTab(model: model)
-    let hint = try tab.inspect().find(text: "The ccm CLI isn't on PATH — opening sessions won't work.")
-    #expect(try hint.string() == "The ccm CLI isn't on PATH — opening sessions won't work.")
+    let hint = try tab.inspect().find(text: "The OreoDeck CLI isn't on PATH — opening sessions won't work.")
+    #expect(try hint.string() == "The OreoDeck CLI isn't on PATH — opening sessions won't work.")
 }
 
 @MainActor
@@ -175,7 +175,7 @@ import ViewInspector
 
     let tab = ProfilesTab(model: model)
     #expect(throws: (any Error).self) {
-        try tab.inspect().find(text: "The ccm CLI isn't on PATH — opening sessions won't work.")
+        try tab.inspect().find(text: "The OreoDeck CLI isn't on PATH — opening sessions won't work.")
     }
 }
 

@@ -1,8 +1,10 @@
 {
-  "name": "@ccm/cli",
+  "name": "@oreodeck/cli",
   "version": "0.1.0",
+  "license": "Apache-2.0",
+  "repository": "github:OreoSolutions/oreodeck",
   "type": "module",
-  "bin": { "ccm": "./src/index.ts" },
+  "bin": { "oreodeck": "./src/index.ts", "ord": "./src/index.ts" },
   "dependencies": {
     "@ccm/core": "workspace:*",
     "commander": "^12.1.0"

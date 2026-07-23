@@ -22,6 +22,8 @@ public final class AppModel: ObservableObject {
         case profilesTab
         case usageTab
         case failoverTab
+        case toolsTab
+        case settingsTab
     }
 
     @Published public private(set) var rows: [ProfileRow] = []
@@ -33,6 +35,9 @@ public final class AppModel: ObservableObject {
     /// `message(for:)`); shown in a dismissible banner, not a fatal state.
     @Published public private(set) var actionError: String?
     @Published public private(set) var cliMissing = false
+    @Published public private(set) var terminal = "terminal"
+    @Published public private(set) var availableUpdate: OreoUpdateRelease?
+    @Published public private(set) var checkingForUpdate = false
     /// Name of the subscription profile whose Terminal login we're polling for.
     @Published public private(set) var pendingSubscription: String?
     /// Refreshed on every load so countdowns re-render without their own clock.
@@ -43,6 +48,9 @@ public final class AppModel: ObservableObject {
 
     private let backend: CcmBackend
     private var visibleSurfaces: Set<Surface> = []
+    /// Monotonic generation: overlapping timer/action loads may finish out of
+    /// order, but an older snapshot must never overwrite newer UI state.
+    private var latestLoadID: UInt64 = 0
 
     public init(backend: CcmBackend) {
         self.backend = backend
@@ -72,6 +80,8 @@ public final class AppModel: ObservableObject {
     /// assigned to the `@Published` properties.
     public func load() async {
         loadCount += 1
+        latestLoadID &+= 1
+        let loadID = latestLoadID
         nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         let backend = self.backend
         do {
@@ -80,17 +90,22 @@ public final class AppModel: ObservableObject {
                 let profiles = try backend.listProfiles()
                 let usage = try backend.getUsage()
                 let failover = try backend.getFailover()
-                return (cliInstalled, profiles, usage, failover)
+                let terminal = try backend.getTerminal()
+                return (cliInstalled, profiles, usage, failover, terminal)
             }.value
+            guard loadID == latestLoadID else { return }
             cliMissing = !result.0
             rows = mergeRows(profiles: result.1, usage: result.2)
             failover = result.3
+            terminal = result.4
             loadError = nil
         } catch let error as CcmError {
+            guard loadID == latestLoadID else { return }
             loadError = error
             rows = []
         } catch {
-            loadError = .Io(message: "Something went wrong reading the ccm config.")
+            guard loadID == latestLoadID else { return }
+            loadError = .Io(message: "Something went wrong reading the OreoDeck config.")
         }
     }
 
@@ -120,14 +135,61 @@ public final class AppModel: ObservableObject {
         await perform { try backend.setActive(name: name) }
     }
 
+    public func setSharedResources(name: String, resources: [String]) async {
+        let backend = self.backend
+        await perform { try backend.setSharedResources(name: name, resources: resources) }
+    }
+
+    public func setSharedResourcesForce(name: String, resources: [String]) async {
+        let backend = self.backend
+        await perform { try backend.setSharedResourcesForce(name: name, resources: resources) }
+    }
+
     public func openSession(name: String) async {
         let backend = self.backend
         await perform { try backend.openSession(name: name) }
     }
 
+    public func setTerminal(_ value: String) async {
+        let backend = self.backend
+        await perform { try backend.setTerminal(value: value) }
+    }
+
+    public func openTerminalCommand(_ command: String) async {
+        let backend = self.backend
+        do {
+            try await Task.detached { try backend.openTerminalCommand(command: command) }.value
+            actionError = nil
+        } catch let error as CcmError {
+            actionError = message(for: error)
+        } catch {
+            actionError = "The selected terminal could not be opened."
+        }
+    }
+
     public func openConfigInEditor() async {
         let backend = self.backend
         await perform { try backend.openConfigInEditor() }
+    }
+
+    public var currentVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+    }
+
+    public func checkForUpdates() async {
+        guard !checkingForUpdate else { return }
+        checkingForUpdate = true
+        defer { checkingForUpdate = false }
+        do {
+            availableUpdate = try await OreoUpdateService.newerVersion(currentVersion: currentVersion)
+        } catch {
+            // Network update checks are advisory and must never make the app unusable.
+        }
+    }
+
+    public func installAvailableUpdate() async {
+        guard availableUpdate != nil else { return }
+        await openTerminalCommand("ord update")
     }
 
     /// `key` is key material. It is handed to the core and forgotten here: it

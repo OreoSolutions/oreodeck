@@ -42,8 +42,8 @@ import ViewInspector
     #expect(model.failover.order.isEmpty)
 
     let tab = FailoverTab(model: model)
-    let error = try tab.inspect().find(text: "ccm can't read its config")
-    #expect(try error.string() == "ccm can't read its config")
+    let error = try tab.inspect().find(text: "OreoDeck can't read its config")
+    #expect(try error.string() == "OreoDeck can't read its config")
     #expect(throws: (any Error).self) {
         try tab.inspect().find(text: "No profiles yet")
     }

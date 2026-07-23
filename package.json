@@ -1,5 +1,9 @@
 {
-  "name": "oreo-multiple-claude",
+  "name": "oreodeck",
+  "version": "0.1.0",
+  "description": "Manage multiple isolated Claude Code profiles on macOS",
+  "license": "Apache-2.0",
+  "repository": "github:OreoSolutions/oreodeck",
   "private": true,
   "type": "module",
   "workspaces": ["packages/*"],
@@ -9,8 +13,12 @@
     "typecheck": "tsc --noEmit",
     "lint": "cargo clippy --manifest-path packages/core-rs/Cargo.toml --all-targets -- -D warnings",
     "fmt:check": "cargo fmt --manifest-path packages/core-rs/Cargo.toml --check",
-    "build": "bun build packages/cli/src/index.ts --compile --outfile dist/ccm",
-    "build:app": "bash packages/app/scripts/bundle.sh",
+    "build": "bash scripts/build.sh",
+    "build:cli": "bun build packages/cli/src/index.ts --compile --outfile dist/oreodeck && bun build packages/cli/src/index.ts --compile --outfile dist/ord",
+    "build:app": "bash packages/app/scripts/bundle.sh dist/OreoDeck.app",
+    "sign": "bash scripts/sign.sh",
+    "notarize": "bash scripts/notarize.sh",
+    "package:release": "bash scripts/package-release.sh",
     "test:app": "bash packages/app/scripts/generate.sh && swift test --package-path packages/app"
   },
   "devDependencies": {

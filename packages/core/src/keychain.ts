@@ -3,7 +3,8 @@ import { promisify } from "node:util";
 
 const run = promisify(execFile);
 
-const SERVICE = "com.oreo.ccm";
+const SERVICE = "com.oreo.oreodeck";
+const LEGACY_SERVICE = "com.oreo.ccm";
 
 /** `security` exits with 44 when an item cannot be found (verified via
  * `security find-generic-password -s com.oreo.ccm -a <absent>`). Any other
@@ -74,36 +75,28 @@ export async function setApiKey(profile: string, key: string): Promise<void> {
 }
 
 export async function getApiKey(profile: string): Promise<string | null> {
-  try {
-    const { stdout } = await run("security", [
-      "find-generic-password",
-      "-s", SERVICE,
-      "-a", profile,
-      "-w",
-    ]);
-    // `security -w` appends exactly one trailing newline; strip only that,
-    // not arbitrary trailing whitespace that may be part of the key.
-    return stdout.endsWith("\n") ? stdout.slice(0, -1) : stdout;
-  } catch (err) {
-    if (isNotFoundError(err)) return null;
-    throw new Error(
-      `Failed to read API key for profile "${profile}" from macOS Keychain.`,
-    );
+  for (const service of [SERVICE, LEGACY_SERVICE]) {
+    try {
+      const { stdout } = await run("security", [
+        "find-generic-password", "-s", service, "-a", profile, "-w",
+      ]);
+      return stdout.endsWith("\n") ? stdout.slice(0, -1) : stdout;
+    } catch (err) {
+      if (isNotFoundError(err)) continue;
+      throw new Error(`Failed to read API key for profile "${profile}" from macOS Keychain.`);
+    }
   }
+  return null;
 }
 
 export async function deleteApiKey(profile: string): Promise<void> {
-  try {
-    await run("security", [
-      "delete-generic-password",
-      "-s", SERVICE,
-      "-a", profile,
-    ]);
-  } catch (err) {
-    if (isNotFoundError(err)) return; // Không tồn tại thì coi như đã xóa xong.
-    throw new Error(
-      `Failed to delete API key for profile "${profile}" from macOS Keychain.`,
-    );
+  for (const service of [SERVICE, LEGACY_SERVICE]) {
+    try {
+      await run("security", ["delete-generic-password", "-s", service, "-a", profile]);
+    } catch (err) {
+      if (isNotFoundError(err)) continue;
+      throw new Error(`Failed to delete API key for profile "${profile}" from macOS Keychain.`);
+    }
   }
 }
 

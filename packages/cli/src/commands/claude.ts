@@ -4,7 +4,7 @@ import {
   runHeadlessWithFailover,
   loadConfig,
   nextProfile,
-  findLatestSession,
+  findSessionForRun,
   copySessionToProfile,
 } from "@ccm/core";
 import { promptConfirm } from "../prompt";
@@ -29,6 +29,7 @@ export async function claudeCommand(args: string[], opts: { profile?: string }):
   let runArgs = args;
 
   for (;;) {
+    const launchedAt = Date.now();
     const { code } = await launchClaude(current, runArgs);
     // Phiên tương tác thoát bình thường (0) hoặc do người dùng Ctrl-C (130).
     if (code === 0 || code === 130 || !c.failoverEnabled) {
@@ -36,30 +37,34 @@ export async function claudeCommand(args: string[], opts: { profile?: string }):
       return;
     }
 
-    exhausted.add(current);
-    const next = nextProfile(current, c.failoverOrder, exhausted);
+    // With stdio inherited we deliberately cannot scrape Claude's interactive
+    // terminal output without breaking its TTY. A non-zero exit alone is not
+    // proof of a usage limit (it can also be auth, network, config, or resume
+    // failure), so require an explicit user confirmation before treating this
+    // profile as exhausted. Headless mode captures output and detects the
+    // limit automatically; this conservative confirmation is interactive-only.
+    const next = nextProfile(current, c.failoverOrder, new Set([...exhausted, current]));
     if (!next) {
-      console.error("All profiles have hit their rate limit.");
       process.exitCode = code;
       return;
     }
-
-    const ok = await promptConfirm(
-      `Profile "${current}" may have hit its limit. Continue this conversation on "${next}"?`,
+    const wasRateLimited = await promptConfirm(
+      `Claude exited with code ${code}. Confirm a usage limit and continue this conversation on "${next}"?`,
     );
-    if (!ok) {
+    if (!wasRateLimited) {
       process.exitCode = code;
       return;
     }
 
-    const session = await findLatestSession(current);
+    exhausted.add(current);
+    const session = await findSessionForRun(current, launchedAt);
     if (session) {
       await copySessionToProfile(session.path, current, next);
       runArgs = ["--resume", session.id];
       console.log(`Resuming session ${session.id} on "${next}".`);
     } else {
       runArgs = args;
-      console.log(`No session to carry over — starting fresh on "${next}".`);
+      console.log(`No unambiguous session from this run to carry over — starting fresh on "${next}".`);
     }
     current = next;
   }

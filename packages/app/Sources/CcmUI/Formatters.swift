@@ -34,13 +34,13 @@ public func formatCountdown(resetAtMs: Int64?, nowMs: Int64) -> String {
 public func message(for error: CcmError) -> String {
     switch error {
     case .ConfigCorrupt:
-        return "The ccm config file is not valid JSON and could not be read."
+        return "The OreoDeck config file is not valid JSON and could not be read."
     case .InvalidName(_, let message):
         // store.rs already produced the full sentence (including the charset
         // hint) — don't re-write it here and let the two drift.
         return message
     case .NotFound(let name):
-        return "Profile \"\(name)\" no longer exists. It may have been removed from another window or by the ccm CLI."
+        return "Profile \"\(name)\" no longer exists. It may have been removed from another window or by the OreoDeck CLI."
     case .AlreadyExists(let name):
         return "A profile named \"\(name)\" already exists. Pick another name."
     case .Io(let message):

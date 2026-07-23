@@ -10,6 +10,12 @@ public struct FailoverTab: View {
 
     public var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            PageHeader(
+                eyebrow: "Continuity",
+                title: "Failover",
+                subtitle: "Control automatic switching and the profile order used when limits are reached.",
+                systemImage: "arrow.triangle.branch"
+            )
             // Same banner `ProfilesTab` uses for the same reason (Task 3's
             // Critical finding): `setFailoverEnabled`/`moveFailover` route
             // through `perform`, which sets `actionError` on a rejected
@@ -27,7 +33,7 @@ public struct FailoverTab: View {
                 )
             )
 
-            Text("Order — ccm tries these top to bottom. Drag to reorder.")
+            Text("Order — OreoDeck tries these top to bottom. Drag to reorder.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -41,10 +47,10 @@ public struct FailoverTab: View {
                 // (Task 4 review, Important finding).
                 LoadErrorView(model: model, error: loadError)
             } else if model.failover.order.isEmpty {
-                ContentUnavailableView(
-                    "No profiles yet",
+                OreoEmptyState(
+                    title: "No profiles yet",
+                    message: "Add at least one profile before configuring automatic switching.",
                     systemImage: "arrow.triangle.branch",
-                    description: Text("Add a profile on the Profiles tab to set a failover order.")
                 )
             } else {
                 List {
@@ -60,6 +66,12 @@ public struct FailoverTab: View {
                     }
                 }
             }
+
+            CommandSuggestions(model: model, commands: [
+                CLICommandSuggestion("ord failover show", "Inspect the current failover state and order."),
+                CLICommandSuggestion("ord failover on", "Enable automatic failover."),
+                CLICommandSuggestion("ord failover order <profile...>", "Set the complete fallback order."),
+            ])
         }
         // No 30s timer here on purpose (unlike `ProfilesTab`/`UsageTab`):
         // spec §3 only requires auto-refresh for the popover, Profiles and

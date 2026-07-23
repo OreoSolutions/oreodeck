@@ -104,7 +104,7 @@ export function renderUsageTable(rows: Row[]): string[] {
 export async function statusCommand(): Promise<void> {
   const c = await loadConfig();
   if (c.profiles.length === 0) {
-    console.log("No profiles yet. Create one with `ccm add <name>`.");
+    console.log("No profiles yet. Create one with `oreodeck add <name>`.");
     return;
   }
 

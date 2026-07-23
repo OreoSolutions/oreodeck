@@ -4,7 +4,8 @@ use security_framework::passwords::{
     delete_generic_password, get_generic_password, set_generic_password,
 };
 
-pub const KEYCHAIN_SERVICE: &str = "com.oreo.ccm";
+pub const KEYCHAIN_SERVICE: &str = "com.oreo.oreodeck";
+const LEGACY_KEYCHAIN_SERVICE: &str = "com.oreo.ccm";
 
 /// `errSecItemNotFound` — verified trên docs.rs cho security-framework 3.7.0.
 const ERR_SEC_ITEM_NOT_FOUND: i32 = -25300;
@@ -21,7 +22,20 @@ impl KeychainError {
 /// Test seam: service throwaway qua CCM_KEYCHAIN_SERVICE, để test không đụng
 /// Keychain thật của người dùng.
 fn service() -> String {
-    env::var("CCM_KEYCHAIN_SERVICE").unwrap_or_else(|_| KEYCHAIN_SERVICE.to_string())
+    env::var("OREODECK_KEYCHAIN_SERVICE")
+        .or_else(|_| env::var("CCM_KEYCHAIN_SERVICE"))
+        .unwrap_or_else(|_| KEYCHAIN_SERVICE.to_string())
+}
+
+fn service_candidates() -> Vec<String> {
+    if env::var("OREODECK_KEYCHAIN_SERVICE").is_ok() || env::var("CCM_KEYCHAIN_SERVICE").is_ok() {
+        vec![service()]
+    } else {
+        vec![
+            KEYCHAIN_SERVICE.to_string(),
+            LEGACY_KEYCHAIN_SERVICE.to_string(),
+        ]
+    }
 }
 
 /// Lưu key. `set_generic_password` tự tạo mới hoặc ghi đè (tương đương `-U`).
@@ -36,23 +50,33 @@ pub fn set_api_key(profile: &str, key: &str) -> Result<(), KeychainError> {
 }
 
 pub fn get_api_key(profile: &str) -> Result<Option<String>, KeychainError> {
-    match get_generic_password(&service(), profile) {
-        Ok(bytes) => Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
-        Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(None),
-        Err(_) => Err(KeychainError(format!(
-            "Failed to read API key for profile \"{profile}\" from macOS Keychain."
-        ))),
+    for candidate in service_candidates() {
+        match get_generic_password(&candidate, profile) {
+            Ok(bytes) => return Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
+            Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => continue,
+            Err(_) => {
+                return Err(KeychainError(format!(
+                    "Failed to read API key for profile \"{profile}\" from macOS Keychain."
+                )))
+            }
+        }
     }
+    Ok(None)
 }
 
 pub fn delete_api_key(profile: &str) -> Result<(), KeychainError> {
-    match delete_generic_password(&service(), profile) {
-        Ok(()) => Ok(()),
-        Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => Ok(()),
-        Err(_) => Err(KeychainError(format!(
-            "Failed to delete API key for profile \"{profile}\" from macOS Keychain."
-        ))),
+    for candidate in service_candidates() {
+        match delete_generic_password(&candidate, profile) {
+            Ok(()) => {}
+            Err(e) if e.code() == ERR_SEC_ITEM_NOT_FOUND => {}
+            Err(_) => {
+                return Err(KeychainError(format!(
+                    "Failed to delete API key for profile \"{profile}\" from macOS Keychain."
+                )))
+            }
+        }
     }
+    Ok(())
 }
 
 #[cfg(test)]

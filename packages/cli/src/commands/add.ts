@@ -35,7 +35,7 @@ export async function addCommand(name: string, opts: AddOptions): Promise<void> 
   console.log(`Created profile "${name}".`);
 
   // CCM_SKIP_LOGIN cho phép test tạo profile mà không mở luồng OAuth.
-  if (process.env.CCM_SKIP_LOGIN) return;
+  if (process.env.OREODECK_SKIP_LOGIN || process.env.CCM_SKIP_LOGIN) return;
 
   console.log("Opening Claude Code to sign in — run /login, then /exit when done.");
   // Route through buildEnv (not a hand-rolled env object) so this spawn gets
@@ -44,7 +44,7 @@ export async function addCommand(name: string, opts: AddOptions): Promise<void> 
   // ANTHROPIC_API_KEY inherited from the shell stripped, since a stray key
   // silently overrides OAuth and sabotages the login flow (F-4).
   const env = await buildEnv({ name, kind: "subscription" }, null, process.env);
-  const bin = process.env.CCM_CLAUDE_BIN ?? "claude"; // F-5: match launcher/failover.
+  const bin = process.env.OREODECK_CLAUDE_BIN ?? process.env.CCM_CLAUDE_BIN ?? "claude"; // F-5: match launcher/failover.
   await new Promise<void>((resolve, reject) => {
     const child = spawn(bin, [], { stdio: "inherit", env });
     child.on("error", (err) =>
@@ -56,5 +56,5 @@ export async function addCommand(name: string, opts: AddOptions): Promise<void> 
     );
     child.on("close", () => resolve());
   });
-  console.log(`Profile "${name}" is ready. Run it with \`ccm claude -P ${name}\`.`);
+  console.log(`Profile "${name}" is ready. Run it with \`oreodeck run -P ${name}\`.`);
 }

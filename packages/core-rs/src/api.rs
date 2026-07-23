@@ -8,7 +8,7 @@ use crate::{keychain, store, terminal, usage};
 /// fixed template naming only the profile.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum CcmError {
-    #[error("The ccm config file is not valid JSON and could not be read.")]
+    #[error("The OreoDeck config file is not valid JSON and could not be read.")]
     ConfigCorrupt,
     #[error("{message}")]
     InvalidName { name: String, message: String },
@@ -32,6 +32,8 @@ impl From<store::StoreError> for CcmError {
             store::StoreError::NotFound(name) => CcmError::NotFound { name },
             store::StoreError::AlreadyExists(name) => CcmError::AlreadyExists { name },
             store::StoreError::Io(_) => CcmError::Io { message },
+            store::StoreError::SharedResource(_) => CcmError::Io { message },
+            store::StoreError::InvalidTerminal(_) => CcmError::Io { message },
         }
     }
 }
@@ -60,6 +62,7 @@ pub struct ProfileView {
     /// "subscription" | "api-key" — same wire values as config.json's `kind`.
     pub kind: String,
     pub active: bool,
+    pub shared_resources: Vec<String>,
 }
 
 #[derive(Debug, uniffi::Record)]
@@ -112,12 +115,26 @@ pub fn list_profiles() -> Result<Vec<ProfileView>, CcmError> {
     let active = c.active.clone();
     Ok(c.profiles
         .into_iter()
-        .map(|p| ProfileView {
-            active: is_active(&active, &p.name),
-            name: p.name,
-            kind: kind_str(p.kind),
+        .map(|p| {
+            let shared_resources = store::profile_shared_resources(&p);
+            ProfileView {
+                active: is_active(&active, &p.name),
+                name: p.name,
+                kind: kind_str(p.kind),
+                shared_resources,
+            }
         })
         .collect())
+}
+
+#[uniffi::export]
+pub fn set_shared_resources(name: String, resources: Vec<String>) -> Result<(), CcmError> {
+    Ok(store::set_shared_resources(&name, &resources)?)
+}
+
+#[uniffi::export]
+pub fn set_shared_resources_force(name: String, resources: Vec<String>) -> Result<(), CcmError> {
+    Ok(store::set_shared_resources_force(&name, &resources)?)
 }
 
 /// Walks every profile's transcript directory (`usage::read_profile_usage`),
@@ -228,6 +245,16 @@ pub fn set_failover_order(names: Vec<String>) -> Result<(), CcmError> {
     Ok(store::set_failover_order(&names)?)
 }
 
+#[uniffi::export]
+pub fn get_terminal() -> Result<String, CcmError> {
+    Ok(store::get_terminal()?)
+}
+
+#[uniffi::export]
+pub fn set_terminal(value: String) -> Result<(), CcmError> {
+    Ok(store::set_terminal(&value)?)
+}
+
 /// `terminal::open_session` runs `assert_valid_name` itself before the name
 /// reaches the AppleScript/shell command — that check lives there, at the
 /// chokepoint, not here.
@@ -239,6 +266,11 @@ pub fn open_session(name: String) -> Result<(), CcmError> {
 #[uniffi::export]
 pub fn open_login_terminal(name: String) -> Result<(), CcmError> {
     Ok(terminal::open_login_terminal(&name)?)
+}
+
+#[uniffi::export]
+pub fn open_terminal_command(command: String) -> Result<(), CcmError> {
+    Ok(terminal::open_command(&command)?)
 }
 
 #[uniffi::export]

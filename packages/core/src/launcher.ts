@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { profileDir } from "./paths";
 import { getApiKey } from "./keychain";
 import { getProfile, type Profile } from "./profile-store";
+import { syncSharedConfiguration } from "./shared-config";
 
 export interface LaunchResult {
   code: number;
@@ -16,6 +17,7 @@ export async function buildEnv(
   apiKey: string | null,
   base: NodeJS.ProcessEnv,
 ): Promise<NodeJS.ProcessEnv> {
+  await syncSharedConfiguration(profile.name, profile.sharedResources ?? []);
   const env: NodeJS.ProcessEnv = { ...base };
   env.CLAUDE_CONFIG_DIR = profileDir(profile.name);
   if (profile.kind === "api-key") {
@@ -37,7 +39,7 @@ export async function launchClaude(
   if (!profile) throw new Error(`Profile "${profileName}" not found.`);
   const apiKey = profile.kind === "api-key" ? await getApiKey(profile.name) : null;
   const env = await buildEnv(profile, apiKey, process.env);
-  const bin = process.env.CCM_CLAUDE_BIN ?? "claude";
+  const bin = process.env.OREODECK_CLAUDE_BIN ?? process.env.CCM_CLAUDE_BIN ?? "claude";
 
   return new Promise<LaunchResult>((resolve, reject) => {
     const child = spawn(bin, args, { stdio: "inherit", env });

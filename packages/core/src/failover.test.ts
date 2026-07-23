@@ -9,7 +9,10 @@ import {
   setFailoverOrder,
   setFailoverEnabled,
   findLatestSession,
+  findSessionForRun,
   copySessionToProfile,
+  listImportableSessions,
+  importSessionToProfile,
 } from "./failover";
 import { addProfile, loadConfig } from "./profile-store";
 import { profileDir } from "./paths";
@@ -24,6 +27,27 @@ beforeEach(async () => {
 afterEach(async () => {
   delete process.env.CCM_HOME;
   await rm(dir, { recursive: true, force: true });
+});
+
+test("lists global and other-profile sessions but excludes destination and subagents", async () => {
+  process.env.CCM_GLOBAL_CLAUDE_HOME = join(dir, "global");
+  await addProfile("work", "subscription");
+  await addProfile("personal", "subscription");
+  const globalSession = join(dir, "global", "projects", "-tmp-app", "global-id.jsonl");
+  const otherSession = join(profileDir("personal"), "projects", "-tmp-api", "other-id.jsonl");
+  const ownSession = join(profileDir("work"), "projects", "-tmp-own", "own-id.jsonl");
+  const subagent = join(profileDir("personal"), "projects", "-tmp-api", "other-id", "subagents", "agent-x.jsonl");
+  for (const path of [globalSession, otherSession, ownSession, subagent]) {
+    await mkdir(join(path, ".."), { recursive: true });
+    await writeFile(path, JSON.stringify({ cwd: "/tmp/app", message: { role: "user", content: "Fix the dashboard" } }) + "\n");
+  }
+  const sessions = await listImportableSessions("work");
+  expect(sessions.map((item) => item.id).sort()).toEqual(["global-id", "other-id"]);
+  expect(sessions.find((item) => item.id === "global-id")?.source).toBe("global");
+  const selected = sessions.find((item) => item.id === "other-id")!;
+  await importSessionToProfile(selected, "work");
+  expect(await Bun.file(join(profileDir("work"), "projects", "-tmp-api", "other-id.jsonl")).text()).toContain("Fix the dashboard");
+  delete process.env.CCM_GLOBAL_CLAUDE_HOME;
 });
 
 test("isRateLimitOutput detects the usage-limit message", () => {
@@ -115,6 +139,16 @@ test("findLatestSession returns the most recently modified transcript", async ()
 test("findLatestSession returns null when the profile has no transcripts", async () => {
   await addProfile("fresh", "subscription");
   expect(await findLatestSession("fresh")).toBeNull();
+});
+
+test("findSessionForRun returns only one transcript modified by this run", async () => {
+  const root = join(profileDir("work"), "projects", "project-a");
+  await mkdir(root, { recursive: true });
+  const launchedAt = Date.now();
+  await Bun.write(join(root, "current.jsonl"), "{}\n");
+  expect((await findSessionForRun("work", launchedAt))?.id).toBe("current");
+  await Bun.write(join(root, "parallel.jsonl"), "{}\n");
+  expect(await findSessionForRun("work", launchedAt)).toBeNull();
 });
 
 test("copySessionToProfile mirrors the relative path into the target profile", async () => {

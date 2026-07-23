@@ -1,85 +1,354 @@
-# ccm — Multi-account Claude Code Manager
+# OreoDeck
 
-Chạy nhiều tài khoản Claude cùng lúc trên macOS: chuyển đổi nhanh, chạy song song
-nhiều phiên, tự động failover khi hết limit, và theo dõi usage.
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![macOS](https://img.shields.io/badge/macOS-15%2B-black.svg)](https://www.apple.com/macos/)
 
-## Cài đặt
+<p align="center">
+  <img src="packages/app/Resources/OreoDeck.png" alt="OreoDeck logo" width="128">
+</p>
+
+<p align="center">
+  A macOS app and CLI for managing multiple isolated Claude Code profiles.
+</p>
+
+OreoDeck lets you run multiple Claude accounts side by side, pin a profile to
+one terminal tab, monitor usage, move sessions between profiles, share selected
+global resources, and fail over when an account reaches its usage limit.
+
+The full command is `oreodeck`; `ord` is the shorter alias. Both provide the
+same functionality.
+
+## Highlights
+
+- Isolated Claude Code profiles powered by a separate `CLAUDE_CONFIG_DIR` for
+  every account.
+- Subscription/OAuth and API-key profiles, with API keys stored in macOS
+  Keychain rather than configuration files.
+- Global, per-tab, and one-command profile selection.
+- Interactive session picker for importing and resuming conversations from
+  global Claude or another profile.
+- Selective sharing for MCP servers, skills, and plugins without sharing
+  credentials or all profile settings.
+- Five-hour token usage and estimated API cost summaries.
+- Configurable automatic failover order.
+- Native SwiftUI dashboard and menu-bar app.
+- Terminal integrations for Terminal.app, Ghostty, iTerm2, WezTerm, Alacritty,
+  Kitty, Warp, Hyper, Tabby, Rio, and Wave Terminal.
+- Bilingual English/Vietnamese installer with English as the default.
+
+## Requirements
+
+- macOS 15 or later for the desktop app.
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) installed and
+  available on `PATH`.
+- A full OreoDeck Release package requires no Bun, Rust, or Xcode installation.
+- Building from source requires Bun, Rust/Cargo, Swift 6, and Xcode Command Line
+  Tools.
+
+## Install from a release
+
+Install the latest signed release directly, without downloading it manually:
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/OreoSolutions/oreodeck/main/install.sh | bash
+```
+
+The bootstrap installer downloads the stable asset for the current Mac
+architecture, verifies its published SHA-256 checksum, then runs the bundled
+native installer. Alternatively, download and extract the complete release
+archive and run:
+
+```bash
+./install.sh
+```
+
+The installer asks for a language first. Press Enter to use English, or choose
+Vietnamese. It then asks whether to install the optional desktop app and
+whether the `claude` command should automatically route through OreoDeck.
+
+Finder users can double-click `install.command`; it invokes the same installer
+and keeps the window open so the result remains visible.
+
+The installer places:
+
+- `oreodeck` and `ord` in `~/.local/bin`.
+- `OreoDeck.app` in `~/Applications` when the UI is selected.
+- A reusable UI payload in `~/.local/share/oreodeck`.
+
+If you initially install only the CLI, install the app later with:
+
+```bash
+ord ui install
+ord ui open
+```
+
+## Quick start
+
+Create a subscription profile and finish Claude login in the opened terminal:
+
+```bash
+oreodeck add work
+```
+
+Create an API-key profile:
+
+```bash
+oreodeck add automation --api-key
+```
+
+List profiles, choose the global default, and launch Claude:
+
+```bash
+ord list
+ord use work
+ord run
+```
+
+Override the profile for one invocation:
+
+```bash
+ord run -P personal
+```
+
+Arguments after `run` are forwarded to Claude Code:
+
+```bash
+ord run -P work -- --resume <session-id>
+ord run -P automation -p "Summarize this repository"
+```
+
+## Use different profiles in different terminal tabs
+
+Enable shell integration during installation, or add it manually:
+
+```bash
+oreodeck shell-init >> ~/.zshrc
+source ~/.zshrc
+```
+
+Verify that `claude` is routed through OreoDeck:
+
+```bash
+type claude
+```
+
+Pin each tab independently:
+
+```bash
+# Tab 1
+ord use --tab work
+claude
+
+# Tab 2
+ord use --tab personal
+claude
+```
+
+Profile resolution follows this order:
+
+1. Explicit `-P` / `--profile` option.
+2. Profile pinned to the current tab with `ord use --tab`.
+3. Global active profile selected with `ord use <name>`.
+
+## Sessions
+
+Pick a session from global Claude or another profile, copy it into the current
+profile, and resume it immediately:
+
+```bash
+ord sessions
+```
+
+Useful filters:
+
+```bash
+ord sessions --from global
+ord sessions --from personal
+ord sessions --list
+ord sessions -P work
+```
+
+The picker excludes the destination profile and subagent transcripts. Sessions
+are copied on demand rather than sharing the entire history directory, keeping
+profiles isolated.
+
+## Shared resources
+
+Configure shared resources interactively:
+
+```bash
+ord shared set work
+```
+
+Use the arrow keys to move, Space to select, and Enter to confirm. Configure
+the same resources non-interactively with:
+
+```bash
+ord shared set work mcp skills plugins
+ord shared show work
+ord shared clear work
+```
+
+If the profile already owns a conflicting resource, OreoDeck refuses to replace
+it by default. To explicitly back it up and create the managed link:
+
+```bash
+ord shared set work skills plugins --force --yes
+```
+
+Backups are stored under the profile's `.oreodeck-backups/shared` directory.
+
+Sharing remains selective:
+
+- Skills and plugin resources use managed symlinks.
+- Plugin activation copies only `enabledPlugins` and
+  `extraKnownMarketplaces` into the isolated settings file.
+- MCP sharing copies only `mcpServers` into the isolated Claude state file.
+- OAuth credentials, API keys, projects, history, and unrelated settings remain
+  private to each profile.
+- Disabling sharing restores the profile's original configuration values.
+
+## Usage and failover
+
+View the current five-hour usage window:
+
+```bash
+ord status
+```
+
+Configure failover:
+
+```bash
+ord failover order work personal automation
+ord failover on
+ord failover show
+ord failover off
+```
+
+Headless Claude runs can detect rate-limit output and retry with the next
+profile automatically. Interactive runs ask for confirmation before carrying
+the current session to another profile because an inherited TTY cannot be
+scraped safely for a rate-limit message.
+
+## Desktop app
+
+The native SwiftUI app provides:
+
+- A menu-bar profile overview.
+- Profile creation, activation, removal, and session launching.
+- Usage and estimated-cost dashboards.
+- Failover configuration.
+- Shared resource selection.
+- Contextual CLI suggestions that can be copied or opened in a terminal.
+- Terminal preference and integration testing.
+
+Terminal.app, Ghostty, iTerm2, WezTerm, Alacritty, and Kitty can launch OreoDeck
+commands directly. Warp, Hyper, Tabby, Rio, and Wave Terminal are available as
+window-only integrations; OreoDeck shows a warning and the command must be run
+manually inside the opened window.
+
+Manage the optional app from the CLI:
+
+```bash
+ord ui install
+ord ui open
+ord ui remove
+```
+
+## Data and security
+
+OreoDeck stores profiles under:
+
+```text
+~/.oreodeck/profiles/<profile-name>/
+```
+
+Existing installations using `~/.ccm` remain supported. Override the data
+location with `OREODECK_HOME`; the legacy `CCM_HOME` variable is also accepted.
+
+API keys use the macOS Keychain service `com.oreo.oreodeck`. Keys stored by the
+legacy `com.oreo.ccm` service remain readable and removable for compatibility.
+
+## Build from source
+
+```bash
+bun install
 bun run build
-cp dist/ccm /usr/local/bin/ccm
 ```
 
-## Dùng
+Build outputs:
+
+```text
+dist/oreodeck
+dist/ord
+dist/OreoDeck.app
+```
+
+Run the test and quality suites:
 
 ```bash
-ccm add work                  # thêm profile subscription (mở luồng /login)
-ccm add bot --api-key         # thêm profile API key (lưu vào Keychain)
-ccm list                      # xem các profile
-ccm use work                  # đặt profile mặc định
-ccm claude                    # chạy Claude Code với profile active
-ccm claude -P personal        # chạy với profile chỉ định — mở nhiều tab để chạy song song
-ccm status                    # xem usage trong cửa sổ 5 giờ
-ccm remove <name>             # xóa profile và dữ liệu của nó (hỏi xác nhận)
-ccm failover order work personal bot
-ccm shell-init >> ~/.zshrc    # để `claude` luôn đi qua profile active
+bun run typecheck
+bun run test
+cargo test --manifest-path packages/core-rs/Cargo.toml
+bun run test:app
+bun run test:contract
+bun run lint
+bun run fmt:check
 ```
 
-Failover tự động (chuyển sang profile kế tiếp khi hết limit) bật/tắt bằng
-`ccm failover on` / `ccm failover off`.
+Release builds are Developer ID signed and notarized through the scripts in
+`scripts/`. Never remove quarantine to bypass a failed release verification.
 
-## Cách hoạt động
-
-Mỗi profile là một `CLAUDE_CONFIG_DIR` riêng tại `~/.ccm/profiles/<tên>/`, nên
-mỗi phiên có đăng nhập, settings và lịch sử độc lập. `~/.claude` của bạn không
-bị đụng tới. API key nằm trong macOS Keychain, không nằm trong file config.
-
-Thiết kế: `docs/superpowers/specs/2026-07-16-ccm-multi-account-claude-design.md`
-
-## App (menu-bar + dashboard)
-
-`packages/app` là một app **SwiftUI native**: icon trên menu bar (popover xem
-usage nhanh, mở phiên) cộng dashboard (tab Profiles / Usage / Failover). Nó
-quản lý đúng những profile mà CLI quản lý — đọc/ghi chung `~/.ccm/config.json`,
-chung Keychain service `com.oreo.ccm`. Cần `ccm` trên PATH để mở phiên (Open
-session) và đăng nhập subscription (Add subscription mở Terminal chạy
-`ccm add <name>` rồi tự chờ profile hiện ra).
-
-Logic core viết bằng Rust (`packages/core-rs`) và dùng lại nguyên vẹn từ bản
-app trước; SwiftUI gọi sang qua **uniffi 0.32** với binding sinh tự động, nên
-kiểu ở hai bên không thể lệch nhau.
-
-Build:
+Create and verify a local release:
 
 ```bash
-bun run build:app          # cargo build → uniffi-bindgen → swift build → ccm.app
-open packages/app/ccm.app
+./scripts/build.sh
+CODESIGN_ID='REDACTED' ./scripts/sign.sh
+NOTARY_PROFILE='oreodeck-notary' ./scripts/notarize.sh
+./scripts/package-release.sh
 ```
 
-Test:
+The CLI checks GitHub Releases at most once per day on interactive commands and
+asks before installing. Use `ord update --check` for an explicit check or
+`ord update` to download, verify and install an available release. Set
+`OREODECK_DISABLE_UPDATE_CHECK=1` to disable automatic checks.
+
+## Uninstall
+
+Remove the app, app backups, CLI, cached UI payload, and shell integration while
+keeping profiles:
 
 ```bash
-bun run test               # suite TS (core + cli)
-bun run test:app           # suite Swift (view model)
-cargo test --manifest-path packages/core-rs/Cargo.toml   # suite Rust
-bun run test:contract      # golden fixtures, TS ↔ Rust cùng đọc
-bun run lint && bun run fmt:check
+ord uninstall
 ```
 
-Sau khi đổi `packages/core-rs/src/api.rs`, chạy lại
-`bash packages/app/scripts/generate.sh` để sinh lại binding (binding bị
-gitignore — nó luôn được sinh từ thư viện đã build, không bao giờ sửa tay).
+Permanently remove OreoDeck and all managed profiles, sessions, configuration,
+and stored API keys:
 
-**`.app` chưa ký (unsigned):** ký + notarize vẫn ngoài phạm vi. Bản build ngay
-trên máy mở thẳng được. Nếu copy `.app` qua máy khác rồi double-click, macOS
-Gatekeeper báo "ccm is damaged and can't be opened" — không phải bug. Cách mở:
+```bash
+ord uninstall --purge
+```
 
-`xattr -dr com.apple.quarantine /Applications/ccm.app`
+`--purge` cannot be undone. Both commands ask for confirmation; use `--yes`
+only in automation where the removal scope has already been reviewed.
 
-Chuột phải → Open **không** dùng được: bundle chỉ có chữ ký ad-hoc do linker
-tạo (`codesign --verify` fail), mà lối chuột-phải chưa bao giờ áp dụng cho chữ
-ký không hợp lệ — và Apple đã bỏ hẳn lối này từ macOS Sequoia (15).
+## Changelog
 
-Thiết kế: `docs/superpowers/specs/2026-07-17-ccm-swift-app-design.md`
-Spike chứng minh chuỗi uniffi → Swift → `.app`:
-`docs/superpowers/spikes/2026-07-17-uniffi-swift.md`
+See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
+## License
+
+Copyright 2026 OreoSolutions.
+
+OreoDeck is open-source software licensed under the
+[Apache License 2.0](LICENSE). It may be used, modified, and distributed,
+including commercially, subject to the license terms. Apache-2.0 includes an
+express patent grant from contributors and does not grant rights to project
+trademarks.
+
+Third-party components remain under their own licenses. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), the included
+[license texts](LICENSES), and the [trademark policy](TRADEMARKS.md).
+
+Contributions are accepted under Apache-2.0 as described in
+[CONTRIBUTING.md](CONTRIBUTING.md).

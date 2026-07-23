@@ -1,6 +1,8 @@
 {
   "name": "@ccm/core",
   "version": "0.1.0",
+  "license": "Apache-2.0",
+  "repository": "github:OreoSolutions/oreodeck",
   "type": "module",
   "main": "./src/index.ts",
   "exports": { ".": "./src/index.ts" }

@@ -3,7 +3,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
 use std::sync::LazyLock;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -66,6 +67,8 @@ pub enum StoreError {
     AlreadyExists(String),
     CorruptConfig,
     Io(String),
+    SharedResource(String),
+    InvalidTerminal(String),
 }
 
 impl StoreError {
@@ -82,24 +85,34 @@ impl StoreError {
             StoreError::NotFound(n) => format!("Profile \"{n}\" not found."),
             StoreError::AlreadyExists(n) => format!("Profile \"{n}\" already exists."),
             StoreError::CorruptConfig => {
-                "The ccm config file is not valid JSON and could not be read.".to_string()
+                "The OreoDeck config file is not valid JSON and could not be read.".to_string()
             }
             StoreError::Io(_) => {
-                "A file operation failed. Check that ~/.ccm is readable and writable.".to_string()
+                "A file operation failed. Check that the OreoDeck data folder is readable and writable.".to_string()
             }
+            StoreError::SharedResource(message) => message.clone(),
+            StoreError::InvalidTerminal(value) => format!(
+                "Unsupported terminal \"{value}\". Choose a terminal from OreoDeck Settings."
+            ),
         }
     }
 }
 
 fn default_home() -> PathBuf {
     let home = env::var("HOME").unwrap_or_default();
-    PathBuf::from(home).join(".ccm")
+    let current = PathBuf::from(&home).join(".oreodeck");
+    let legacy = PathBuf::from(home).join(".ccm");
+    if current.exists() || !legacy.exists() {
+        current
+    } else {
+        legacy
+    }
 }
 
 /// Khớp semantics `ccmHome()` của paths.ts: trim; rỗng/toàn khoảng trắng ⇒
 /// fallback ~/.ccm; tương đối ⇒ resolve tuyệt đối theo CWD.
 pub fn ccm_home() -> PathBuf {
-    match env::var("CCM_HOME") {
+    match env::var("OREODECK_HOME").or_else(|_| env::var("CCM_HOME")) {
         Ok(v) => {
             let trimmed = v.trim();
             if trimmed.is_empty() {
@@ -119,6 +132,199 @@ pub fn ccm_home() -> PathBuf {
 
 pub fn profiles_dir() -> PathBuf {
     ccm_home().join("profiles")
+}
+
+pub const SHARED_RESOURCES: &[&str] = &[
+    "CLAUDE.md",
+    "settings.json",
+    "statusline.sh",
+    "agents",
+    "commands",
+    "skills",
+    "plugins",
+    "mcp",
+];
+
+pub fn global_claude_dir() -> PathBuf {
+    match env::var("OREODECK_GLOBAL_CLAUDE_HOME").or_else(|_| env::var("CCM_GLOBAL_CLAUDE_HOME")) {
+        Ok(v) if !v.trim().is_empty() => {
+            let p = Path::new(v.trim());
+            if p.is_absolute() {
+                p.to_path_buf()
+            } else {
+                env::current_dir().unwrap_or_default().join(p)
+            }
+        }
+        _ => PathBuf::from(env::var("HOME").unwrap_or_default()).join(".claude"),
+    }
+}
+
+pub fn profile_shared_resources(profile: &Profile) -> Vec<String> {
+    profile
+        .extra
+        .get("sharedResources")
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn validate_shared_resources(resources: &[String]) -> Result<Vec<String>, StoreError> {
+    let mut unique = Vec::new();
+    for resource in resources {
+        if !SHARED_RESOURCES.contains(&resource.as_str()) {
+            return Err(StoreError::SharedResource(format!(
+                "Unsupported shared resource \"{resource}\". Allowed: {}.",
+                SHARED_RESOURCES.join(", ")
+            )));
+        }
+        if !unique.contains(resource) {
+            unique.push(resource.clone());
+        }
+    }
+    Ok(unique)
+}
+
+fn is_expected_link(destination: &Path, source: &Path) -> Result<bool, StoreError> {
+    let metadata = fs::symlink_metadata(destination).map_err(|e| StoreError::Io(e.to_string()))?;
+    if !metadata.file_type().is_symlink() {
+        return Ok(false);
+    }
+    let target = fs::read_link(destination).map_err(|e| StoreError::Io(e.to_string()))?;
+    let resolved = if target.is_absolute() {
+        target
+    } else {
+        destination.parent().unwrap_or(Path::new("")).join(target)
+    };
+    Ok(resolved == source)
+}
+
+pub fn set_shared_resources(name: &str, requested: &[String]) -> Result<(), StoreError> {
+    set_shared_resources_impl(name, requested, false)
+}
+
+pub fn set_shared_resources_force(name: &str, requested: &[String]) -> Result<(), StoreError> {
+    set_shared_resources_impl(name, requested, true)
+}
+
+fn set_shared_resources_impl(
+    name: &str,
+    requested: &[String],
+    force: bool,
+) -> Result<(), StoreError> {
+    use std::os::unix::fs::symlink;
+    let resources = validate_shared_resources(requested)?;
+    let _lock = acquire_config_lock()?;
+    let mut config = load_config()?;
+    let profile_index = config
+        .profiles
+        .iter()
+        .position(|p| p.name.eq_ignore_ascii_case(name))
+        .ok_or_else(|| StoreError::NotFound(name.to_string()))?;
+    let profile_name = config.profiles[profile_index].name.clone();
+    assert_valid_name(&profile_name)?;
+    let old =
+        validate_shared_resources(&profile_shared_resources(&config.profiles[profile_index]))?;
+    let global = global_claude_dir();
+    let profile_root = profile_dir(&profile_name)?;
+    let mut created: Vec<PathBuf> = Vec::new();
+    let mut removed: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut displaced: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let backup_root = profile_root
+        .join(".oreodeck-backups")
+        .join("shared")
+        .join(format!(
+            "{}-{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis(),
+            process::id()
+        ));
+
+    let result = (|| -> Result<(), StoreError> {
+        for resource in resources.iter().filter(|r| !old.contains(r)) {
+            if resource == "mcp" {
+                continue;
+            }
+            let source = global.join(resource);
+            let destination = profile_root.join(resource);
+            if fs::symlink_metadata(&source).is_err() {
+                return Err(StoreError::SharedResource(format!(
+                    "Global Claude resource does not exist: ~/.claude/{resource}"
+                )));
+            }
+            match fs::symlink_metadata(&destination) {
+                Ok(_) if is_expected_link(&destination, &source)? => continue,
+                Ok(_) => {
+                    if !force {
+                        return Err(StoreError::SharedResource(format!(
+                            "Profile resource already exists and will not be overwritten: {}",
+                            destination.display()
+                        )));
+                    }
+                    let backup = backup_root.join(resource);
+                    if let Some(parent) = backup.parent() {
+                        fs::create_dir_all(parent).map_err(|e| StoreError::Io(e.to_string()))?;
+                    }
+                    fs::rename(&destination, &backup).map_err(|e| StoreError::Io(e.to_string()))?;
+                    displaced.push((destination.clone(), backup));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(StoreError::Io(e.to_string())),
+            }
+            symlink(&source, &destination).map_err(|e| StoreError::Io(e.to_string()))?;
+            created.push(destination);
+        }
+        for resource in old.iter().filter(|r| !resources.contains(r)) {
+            if resource == "mcp" {
+                continue;
+            }
+            let source = global.join(resource);
+            let destination = profile_root.join(resource);
+            match fs::symlink_metadata(&destination) {
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(StoreError::Io(e.to_string())),
+                Ok(_) if !is_expected_link(&destination, &source)? => {
+                    return Err(StoreError::SharedResource(format!(
+                        "Profile resource is not an OreoDeck-managed symlink: {}",
+                        destination.display()
+                    )))
+                }
+                Ok(_) => {}
+            }
+            fs::remove_file(&destination).map_err(|e| StoreError::Io(e.to_string()))?;
+            removed.push((source, destination));
+        }
+        if resources.is_empty() {
+            config.profiles[profile_index]
+                .extra
+                .remove("sharedResources");
+        } else {
+            config.profiles[profile_index]
+                .extra
+                .insert("sharedResources".to_string(), serde_json::json!(resources));
+        }
+        save_config(&config)
+    })();
+
+    if let Err(error) = result {
+        for destination in created.into_iter().rev() {
+            let _ = fs::remove_file(destination);
+        }
+        for (destination, backup) in displaced.into_iter().rev() {
+            let _ = fs::rename(backup, destination);
+        }
+        for (source, destination) in removed.into_iter().rev() {
+            let _ = symlink(source, destination);
+        }
+        return Err(error);
+    }
+    Ok(())
 }
 
 pub fn config_path() -> PathBuf {
@@ -150,6 +356,71 @@ pub fn load_config() -> Result<Config, StoreError> {
 
 pub fn save_config(c: &Config) -> Result<(), StoreError> {
     write_json_atomic(&config_path(), c)
+}
+
+const LOCK_TIMEOUT: Duration = Duration::from_secs(10);
+const LOCK_STALE: Duration = Duration::from_secs(30);
+
+struct ConfigLock(PathBuf);
+
+impl Drop for ConfigLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+fn acquire_config_lock() -> Result<ConfigLock, StoreError> {
+    let lock = ccm_home().join(".config.lock");
+    fs::create_dir_all(ccm_home()).map_err(|e| StoreError::Io(e.to_string()))?;
+    let started = SystemTime::now();
+    loop {
+        match fs::create_dir(&lock) {
+            Ok(()) => return Ok(ConfigLock(lock)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                let stale = fs::metadata(&lock)
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|m| SystemTime::now().duration_since(m).ok())
+                    .is_some_and(|age| age > LOCK_STALE);
+                if stale {
+                    let stale_lock = ccm_home().join(format!(
+                        ".config.lock.stale-{}-{}",
+                        process::id(),
+                        SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis()
+                    ));
+                    if fs::rename(&lock, &stale_lock).is_ok() {
+                        let _ = fs::remove_dir_all(stale_lock);
+                    }
+                    continue;
+                }
+                if SystemTime::now()
+                    .duration_since(started)
+                    .unwrap_or_default()
+                    >= LOCK_TIMEOUT
+                {
+                    return Err(StoreError::Io(
+                        "timed out waiting for config lock".to_string(),
+                    ));
+                }
+                thread::sleep(Duration::from_millis(25));
+            }
+            Err(e) => return Err(StoreError::Io(e.to_string())),
+        }
+    }
+}
+
+fn update_config<T, F>(mutate: F) -> Result<T, StoreError>
+where
+    F: FnOnce(&mut Config) -> Result<T, StoreError>,
+{
+    let _lock = acquire_config_lock()?;
+    let mut config = load_config()?;
+    let result = mutate(&mut config)?;
+    save_config(&config)?;
+    Ok(result)
 }
 
 /// Ghi atomic: file tạm cùng thư mục `.{pid}-{millis}.tmp`, JSON pretty +
@@ -191,80 +462,126 @@ pub fn get_profile(name: &str) -> Result<Option<Profile>, StoreError> {
 
 pub fn add_profile(name: &str, kind: ProfileKind) -> Result<(), StoreError> {
     assert_valid_name(name)?;
-    let mut c = load_config()?;
-    if find_profile(&c.profiles, name).is_some() {
-        return Err(StoreError::AlreadyExists(name.to_string()));
-    }
-    fs::create_dir_all(profile_dir(name)?).map_err(|e| StoreError::Io(e.to_string()))?;
-    c.profiles.push(Profile {
-        name: name.to_string(),
-        kind,
-        extra: serde_json::Map::new(),
-    });
-    c.failover_order.push(name.to_string());
-    if c.active.is_none() {
-        c.active = Some(name.to_string());
-    }
-    save_config(&c)
+    update_config(|c| {
+        if find_profile(&c.profiles, name).is_some() {
+            return Err(StoreError::AlreadyExists(name.to_string()));
+        }
+        fs::create_dir_all(profile_dir(name)?).map_err(|e| StoreError::Io(e.to_string()))?;
+        c.profiles.push(Profile {
+            name: name.to_string(),
+            kind,
+            extra: serde_json::Map::new(),
+        });
+        c.failover_order.push(name.to_string());
+        if c.active.is_none() {
+            c.active = Some(name.to_string());
+        }
+        Ok(())
+    })
 }
 
 /// Xóa profile: hủy tài nguyên TRƯỚC (thư mục), commit config SAU. Keychain do
 /// command layer (Task 5) xóa trước khi gọi hàm này. Re-validate tên đã lưu.
 pub fn remove_profile(name: &str) -> Result<(), StoreError> {
-    let mut c = load_config()?;
-    let profile = find_profile(&c.profiles, name)
+    let initial = load_config()?;
+    let stored = find_profile(&initial.profiles, name)
         .cloned()
         .ok_or_else(|| StoreError::NotFound(name.to_string()))?;
-    assert_valid_name(&profile.name)?;
-
-    let dir = profile_dir(&profile.name)?;
+    assert_valid_name(&stored.name)?;
+    let dir = profile_dir(&stored.name)?;
     if dir.exists() {
         fs::remove_dir_all(&dir).map_err(|e| StoreError::Io(e.to_string()))?;
     }
 
-    let lower = profile.name.to_lowercase();
-    c.profiles.retain(|p| p.name.to_lowercase() != lower);
-    c.failover_order.retain(|n| n.to_lowercase() != lower);
-    if c.active.as_deref().map(str::to_lowercase) == Some(lower) {
-        c.active = c.profiles.first().map(|p| p.name.clone());
-    }
-    save_config(&c)
+    update_config(|c| {
+        let profile = find_profile(&c.profiles, &stored.name)
+            .cloned()
+            .ok_or_else(|| StoreError::NotFound(stored.name.clone()))?;
+        let lower = profile.name.to_lowercase();
+        c.profiles.retain(|p| p.name.to_lowercase() != lower);
+        c.failover_order.retain(|n| n.to_lowercase() != lower);
+        if c.active.as_deref().map(str::to_lowercase) == Some(lower) {
+            c.active = c.profiles.first().map(|p| p.name.clone());
+        }
+        Ok(())
+    })
 }
 
 pub fn set_active(name: &str) -> Result<(), StoreError> {
-    let mut c = load_config()?;
-    let profile = find_profile(&c.profiles, name)
-        .cloned()
-        .ok_or_else(|| StoreError::NotFound(name.to_string()))?;
-    assert_valid_name(&profile.name)?;
-    c.active = Some(profile.name);
-    save_config(&c)
+    update_config(|c| {
+        let profile = find_profile(&c.profiles, name)
+            .cloned()
+            .ok_or_else(|| StoreError::NotFound(name.to_string()))?;
+        assert_valid_name(&profile.name)?;
+        c.active = Some(profile.name);
+        Ok(())
+    })
 }
 
 pub fn set_failover_enabled(on: bool) -> Result<(), StoreError> {
-    let mut c = load_config()?;
-    c.failover_enabled = on;
-    save_config(&c)
+    update_config(|c| {
+        c.failover_enabled = on;
+        Ok(())
+    })
+}
+
+pub const TERMINAL_CHOICES: &[&str] = &[
+    "terminal",
+    "ghostty",
+    "iterm2",
+    "wezterm",
+    "alacritty",
+    "kitty",
+    "warp",
+    "hyper",
+    "tabby",
+    "rio",
+    "wave",
+];
+
+pub fn get_terminal() -> Result<String, StoreError> {
+    let config = load_config()?;
+    Ok(config
+        .extra
+        .get("terminal")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| TERMINAL_CHOICES.contains(value))
+        .unwrap_or("terminal")
+        .to_string())
+}
+
+pub fn set_terminal(value: &str) -> Result<(), StoreError> {
+    if !TERMINAL_CHOICES.contains(&value) {
+        return Err(StoreError::InvalidTerminal(value.to_string()));
+    }
+    update_config(|config| {
+        config.extra.insert(
+            "terminal".to_string(),
+            serde_json::Value::String(value.to_string()),
+        );
+        Ok(())
+    })
 }
 
 /// Ghi failoverOrder canonical casing (theo spec Giai đoạn 2). Tên không được
 /// liệt kê giữ ở cuối hàng.
 pub fn set_failover_order(names: &[String]) -> Result<(), StoreError> {
-    let c = load_config()?;
-    let mut order: Vec<String> = Vec::with_capacity(names.len());
-    for n in names {
-        let p = find_profile(&c.profiles, n).ok_or_else(|| StoreError::NotFound(n.clone()))?;
-        order.push(p.name.clone());
-    }
-    for p in &c.profiles {
-        let low = p.name.to_lowercase();
-        if !order.iter().any(|o| o.to_lowercase() == low) {
-            order.push(p.name.clone());
+    update_config(|c| {
+        let mut order: Vec<String> = Vec::with_capacity(names.len());
+        for n in names {
+            let p = find_profile(&c.profiles, n).ok_or_else(|| StoreError::NotFound(n.clone()))?;
+            if !order.iter().any(|o| o.eq_ignore_ascii_case(&p.name)) {
+                order.push(p.name.clone());
+            }
         }
-    }
-    let mut c = c;
-    c.failover_order = order;
-    save_config(&c)
+        for p in &c.profiles {
+            if !order.iter().any(|o| o.eq_ignore_ascii_case(&p.name)) {
+                order.push(p.name.clone());
+            }
+        }
+        c.failover_order = order;
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -283,7 +600,7 @@ mod tests {
         env::set_var("CCM_HOME", "   ");
         let home = ccm_home();
         env::remove_var("CCM_HOME");
-        assert!(home.ends_with(".ccm"));
+        assert_eq!(home, default_home());
     }
 
     #[test]
@@ -303,6 +620,22 @@ mod tests {
         assert!(assert_valid_name("").is_err());
         assert!(assert_valid_name("_leading").is_err()); // first char must be alnum
         assert!(assert_valid_name(&"x".repeat(65)).is_err()); // max 64
+    }
+
+    #[test]
+    #[serial]
+    fn terminal_setting_defaults_validates_and_persists() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        assert_eq!(get_terminal().unwrap(), "terminal");
+        set_terminal("ghostty").unwrap();
+        assert_eq!(get_terminal().unwrap(), "ghostty");
+        assert!(matches!(
+            set_terminal("unknown"),
+            Err(StoreError::InvalidTerminal(_))
+        ));
+        assert_eq!(get_terminal().unwrap(), "ghostty");
+        env::remove_var("CCM_HOME");
     }
 
     #[test]
@@ -343,6 +676,108 @@ mod tests {
         assert_eq!(c.active.as_deref(), Some("work"));
         assert_eq!(c.failover_order, vec!["work", "bot"]);
         assert!(profile_dir("work").unwrap().is_dir());
+        env::remove_var("CCM_HOME");
+    }
+
+    #[test]
+    #[serial]
+    fn concurrent_profile_additions_do_not_lose_either_update() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        let a = std::thread::spawn(|| add_profile("work", ProfileKind::Subscription));
+        let b = std::thread::spawn(|| add_profile("personal", ProfileKind::Subscription));
+        a.join().unwrap().unwrap();
+        b.join().unwrap().unwrap();
+        let c = load_config().unwrap();
+        env::remove_var("CCM_HOME");
+        assert_eq!(c.profiles.len(), 2);
+        assert!(c.profiles.iter().any(|p| p.name == "work"));
+        assert!(c.profiles.iter().any(|p| p.name == "personal"));
+    }
+
+    #[test]
+    #[serial]
+    fn shared_resources_create_and_clear_only_managed_symlinks() {
+        let dir = tempfile::tempdir().unwrap();
+        let global = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        env::set_var("CCM_GLOBAL_CLAUDE_HOME", global.path());
+        fs::create_dir(global.path().join("skills")).unwrap();
+        add_profile("work", ProfileKind::Subscription).unwrap();
+
+        set_shared_resources("work", &["skills".to_string()]).unwrap();
+        let link = profile_dir("work").unwrap().join("skills");
+        assert!(fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_eq!(
+            profile_shared_resources(&get_profile("work").unwrap().unwrap()),
+            vec!["skills"]
+        );
+
+        set_shared_resources("work", &[]).unwrap();
+        assert!(!link.exists());
+        assert!(profile_shared_resources(&get_profile("work").unwrap().unwrap()).is_empty());
+        env::remove_var("CCM_GLOBAL_CLAUDE_HOME");
+        env::remove_var("CCM_HOME");
+    }
+
+    #[test]
+    #[serial]
+    fn shared_resources_reject_sensitive_and_existing_real_paths() {
+        let dir = tempfile::tempdir().unwrap();
+        let global = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        env::set_var("CCM_GLOBAL_CLAUDE_HOME", global.path());
+        fs::create_dir(global.path().join("skills")).unwrap();
+        add_profile("work", ProfileKind::Subscription).unwrap();
+        fs::create_dir(profile_dir("work").unwrap().join("skills")).unwrap();
+
+        assert!(matches!(
+            set_shared_resources("work", &["projects".to_string()]),
+            Err(StoreError::SharedResource(_))
+        ));
+        assert!(matches!(
+            set_shared_resources("work", &["skills".to_string()]),
+            Err(StoreError::SharedResource(_))
+        ));
+        env::remove_var("CCM_GLOBAL_CLAUDE_HOME");
+        env::remove_var("CCM_HOME");
+    }
+
+    #[test]
+    #[serial]
+    fn forced_shared_resource_backs_up_local_data_before_symlinking() {
+        let dir = tempfile::tempdir().unwrap();
+        let global = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        env::set_var("CCM_GLOBAL_CLAUDE_HOME", global.path());
+        fs::create_dir(global.path().join("skills")).unwrap();
+        add_profile("work", ProfileKind::Subscription).unwrap();
+        let local = profile_dir("work").unwrap().join("skills");
+        fs::create_dir(&local).unwrap();
+        fs::write(local.join("local.txt"), "keep me").unwrap();
+
+        set_shared_resources_force("work", &["skills".to_string()]).unwrap();
+        assert!(fs::symlink_metadata(&local)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        let backup_root = profile_dir("work")
+            .unwrap()
+            .join(".oreodeck-backups")
+            .join("shared");
+        let backup = fs::read_dir(backup_root)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path()
+            .join("skills")
+            .join("local.txt");
+        assert_eq!(fs::read_to_string(backup).unwrap(), "keep me");
+        env::remove_var("CCM_GLOBAL_CLAUDE_HOME");
         env::remove_var("CCM_HOME");
     }
 
@@ -575,11 +1010,11 @@ mod tests {
 
         let err = result.unwrap_err();
         let c = load_config().unwrap();
-        env::remove_var("CCM_HOME");
 
         assert!(matches!(err, StoreError::Io(_)));
         assert_eq!(c.profiles.len(), 1);
         assert_eq!(c.profiles[0].name, "work");
         assert!(profile_dir("work").unwrap().exists());
+        env::remove_var("CCM_HOME");
     }
 }

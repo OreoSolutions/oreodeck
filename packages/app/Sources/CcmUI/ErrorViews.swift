@@ -35,7 +35,7 @@ public struct LoadErrorView: View {
             // dedicated button, not just the generic retry every other
             // read error gets below.
             ContentUnavailableView {
-                Label("ccm can't read its config", systemImage: "exclamationmark.triangle")
+                Label("OreoDeck can't read its config", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message(for: error))
             } actions: {
@@ -47,7 +47,7 @@ public struct LoadErrorView: View {
             }
         case .InvalidName, .NotFound, .AlreadyExists, .Io, .Keychain:
             ContentUnavailableView {
-                Label("ccm couldn't load your profiles", systemImage: "exclamationmark.triangle")
+                Label("OreoDeck couldn't load your profiles", systemImage: "exclamationmark.triangle")
             } description: {
                 Text(message(for: error))
             } actions: {

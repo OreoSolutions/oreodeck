@@ -1,4 +1,11 @@
+import CcmKit
 import Foundation
+
+extension ProfileView {
+    init(name: String, kind: String, active: Bool) {
+        self.init(name: name, kind: kind, active: active, sharedResources: [])
+    }
+}
 
 /// Polls `condition` until it becomes true instead of racing a fixed-duration
 /// `Task.sleep` against however long a spawned `Task` takes to get its first

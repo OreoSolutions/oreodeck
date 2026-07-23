@@ -10,7 +10,7 @@ struct CcmApp: App {
     @Environment(\.openWindow) private var openWindow
 
     var body: some Scene {
-        MenuBarExtra("ccm", systemImage: "person.2.circle") {
+        MenuBarExtra("OreoDeck", systemImage: "rectangle.stack.fill") {
             MenuBarView(model: model) {
                 // An LSUIElement app is not activated by opening a window, so
                 // the dashboard would come up behind everything else without
@@ -21,7 +21,7 @@ struct CcmApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("ccm", id: "dashboard") {
+        Window("OreoDeck", id: "dashboard") {
             DashboardView(model: model)
         }
         // macOS 15+. Without this the dashboard pops open at launch — wrong for

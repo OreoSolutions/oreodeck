@@ -31,7 +31,7 @@ pub fn escape_applescript(s: &str) -> String {
 /// từ profile của user. Điều này KHÔNG đúng cho `check_cli()`, vốn chạy
 /// trong process của chính app (không qua Terminal), nên hàm đó phải tự
 /// augment PATH — xem comment ở `check_cli`.
-fn run_terminal(command: &str) -> Result<(), TermError> {
+fn run_terminal_app(command: &str) -> Result<(), TermError> {
     let script = format!(
         "tell application \"Terminal\"\nactivate\ndo script \"{}\"\nend tell",
         escape_applescript(command)
@@ -48,6 +48,87 @@ fn run_terminal(command: &str) -> Result<(), TermError> {
     }
 }
 
+fn run_iterm(command: &str) -> Result<(), TermError> {
+    let script = format!(
+        "tell application \"iTerm2\"\nactivate\nset newWindow to (create window with default profile)\ntell current session of newWindow to write text \"{}\"\nend tell",
+        escape_applescript(command)
+    );
+    let status = Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .status()
+        .map_err(|_| TermError("Could not launch iTerm2.".to_string()))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(TermError("iTerm2 returned an error.".to_string()))
+    }
+}
+
+fn run_ghostty(command: &str) -> Result<(), TermError> {
+    let keep_open = format!("{command}; exec /bin/zsh -l");
+    let status = Command::new("open")
+        .args(["-na", "Ghostty", "--args", "-e", "/bin/zsh", "-lic"])
+        .arg(keep_open)
+        .status()
+        .map_err(|_| TermError("Could not launch Ghostty.".to_string()))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(TermError("Ghostty returned an error.".to_string()))
+    }
+}
+
+fn run_open_terminal(app: &str, arguments: &[&str], command: &str) -> Result<(), TermError> {
+    let keep_open = format!("{command}; exec /bin/zsh -l");
+    let mut process = Command::new("open");
+    process.args(["-na", app, "--args"]);
+    process.args(arguments);
+    process.args(["/bin/zsh", "-lic"]);
+    process.arg(keep_open);
+    let status = process
+        .status()
+        .map_err(|_| TermError(format!("Could not launch {app}.")))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(TermError(format!("{app} returned an error.")))
+    }
+}
+
+fn open_window_only(app: &str) -> Result<(), TermError> {
+    let status = Command::new("open")
+        .args(["-na", app])
+        .status()
+        .map_err(|_| TermError(format!("Could not launch {app}.")))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(TermError(format!("{app} returned an error.")))
+    }
+}
+
+pub fn open_command(command: &str) -> Result<(), TermError> {
+    match crate::store::get_terminal()
+        .map_err(|_| TermError("Could not read the terminal setting.".to_string()))?
+        .as_str()
+    {
+        "ghostty" => run_ghostty(command),
+        "iterm2" => run_iterm(command),
+        "wezterm" => {
+            run_open_terminal("WezTerm", &["start", "--always-new-process", "--"], command)
+        }
+        "alacritty" => run_open_terminal("Alacritty", &["-e"], command),
+        "kitty" => run_open_terminal("kitty", &[], command),
+        "warp" => open_window_only("Warp"),
+        "hyper" => open_window_only("Hyper"),
+        "tabby" => open_window_only("Tabby"),
+        "rio" => open_window_only("Rio"),
+        "wave" => open_window_only("Wave"),
+        _ => run_terminal_app(command),
+    }
+}
+
 /// `name` đi qua HAI lớp phòng thủ độc lập trước khi tới tiến trình con.
 /// Lớp (1): `assert_valid_name` (charset `NAME_RE`), gọi NGAY TRƯỚC khi
 /// `name` được nội suy vào chuỗi lệnh shell `format!("ccm claude -P
@@ -60,13 +141,13 @@ fn run_terminal(command: &str) -> Result<(), TermError> {
 /// đúng AppleScript.
 pub fn open_session(name: &str) -> Result<(), TermError> {
     assert_valid_name(name).map_err(|_| TermError("Invalid profile name.".to_string()))?;
-    run_terminal(&format!("ccm claude -P {name}"))
+    open_command(&format!("oreodeck run -P {name}"))
 }
 
 /// Xem comment ở `open_session` — cùng hai lớp phòng thủ, cùng lý do.
 pub fn open_login_terminal(name: &str) -> Result<(), TermError> {
     assert_valid_name(name).map_err(|_| TermError("Invalid profile name.".to_string()))?;
-    run_terminal(&format!("ccm add {name}"))
+    open_command(&format!("oreodeck add {name}"))
 }
 
 /// True nếu `name_dir/name` tồn tại và là file có ít nhất một execute bit
@@ -83,7 +164,11 @@ fn is_executable_file(dir: &Path, name: &str) -> bool {
 /// những gì được truyền vào) — tách riêng để test không phải ghi vào
 /// `/usr/local/bin` thật.
 fn check_cli_in(dirs: &[PathBuf]) -> bool {
-    dirs.iter().any(|dir| is_executable_file(dir, "ccm"))
+    dirs.iter().any(|dir| {
+        is_executable_file(dir, "oreodeck")
+            || is_executable_file(dir, "ord")
+            || is_executable_file(dir, "ccm")
+    })
 }
 
 /// Các thư mục cài đặt phổ biến cho `ccm` (bun CLI) mà launchd KHÔNG đưa
@@ -94,6 +179,7 @@ fn well_known_install_dirs() -> Vec<PathBuf> {
         PathBuf::from("/opt/homebrew/bin"),
     ];
     if let Some(home) = env::var_os("HOME") {
+        dirs.push(PathBuf::from(&home).join(".local/bin"));
         dirs.push(PathBuf::from(home).join(".bun/bin"));
     }
     dirs
