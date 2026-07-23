@@ -7,6 +7,27 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Added Vietnamese and Simplified Chinese README, contribution, and security
+  documentation.
+- Added Ko-fi sponsorship links to all README languages and the native Settings
+  screen.
+
+### Changed
+
+- Restricted shared resources to MCP servers, skills, and plugins while
+  retaining a cleanup path for legacy shared-resource metadata.
+- Release packaging now verifies both versioned and stable archive checksums.
+- Release automation now rolls `Unreleased` into versioned GitHub release notes
+  and skips test, lint, and format commands.
+- The native installer now uses English exclusively and no longer prompts for
+  a language.
+
+### Fixed
+
+- Synchronized the Bun lockfile with the OreoDeck CLI package and binary names.
+
 ## [0.1.0] - 2026-07-23
 
 ### Added
