@@ -18,6 +18,7 @@ private struct TerminalOption: Identifiable {
 
 public struct SettingsView: View {
     private static let sponsorsURL = URL(string: "https://ko-fi.com/nguyenhuyquang")!
+    private static let websiteURL = URL(string: "https://oreodeck.vercel.app")!
 
     @ObservedObject private var model: AppModel
 
@@ -227,13 +228,20 @@ public struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Spacer()
+                        Spacer(minLength: 12)
 
-                        Link(destination: Self.sponsorsURL) {
-                            Label("Support on Ko-fi", systemImage: "cup.and.saucer.fill")
+                        HStack(spacing: 8) {
+                            Link(destination: Self.websiteURL) {
+                                Label("Visit website", systemImage: "safari")
+                            }
+                            .buttonStyle(.bordered)
+
+                            Link(destination: Self.sponsorsURL) {
+                                Label("Support on Ko-fi", systemImage: "cup.and.saucer.fill")
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.pink)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.pink)
                     }
                 }
             }

@@ -4,11 +4,12 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![macOS](https://img.shields.io/badge/macOS-15%2B-black.svg)](https://www.apple.com/macos/)
+[![Website](https://img.shields.io/badge/website-oreodeck.vercel.app-5C4033?logo=safari&logoColor=white)](https://oreodeck.vercel.app)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/nguyenhuyquang)
 
 <p align="center"><img src="assets/brand/generated/oreodeck-mark-transparent-1024.png" alt="Logo OreoDeck" width="128"></p>
 
-<p align="center">Ứng dụng macOS và CLI để quản lý nhiều profile Claude Code được cô lập.</p>
+<p align="center">Ứng dụng macOS và CLI để quản lý nhiều profile Claude Code được cô lập.<br><a href="https://oreodeck.vercel.app">Ghé thăm website OreoDeck</a></p>
 
 OreoDeck cho phép chạy nhiều tài khoản Claude song song, gắn profile theo từng tab terminal, theo dõi mức sử dụng, chuyển session, chia sẻ có chọn lọc tài nguyên global và failover khi tài khoản chạm giới hạn. `oreodeck` là lệnh đầy đủ; `ord` là alias ngắn với cùng chức năng.
 

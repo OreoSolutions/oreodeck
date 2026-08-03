@@ -4,11 +4,12 @@
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![macOS](https://img.shields.io/badge/macOS-15%2B-black.svg)](https://www.apple.com/macos/)
+[![Website](https://img.shields.io/badge/website-oreodeck.vercel.app-5C4033?logo=safari&logoColor=white)](https://oreodeck.vercel.app)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/nguyenhuyquang)
 
 <p align="center"><img src="assets/brand/generated/oreodeck-mark-transparent-1024.png" alt="OreoDeck 标志" width="128"></p>
 
-<p align="center">用于管理多个相互隔离的 Claude Code 配置档案的 macOS 应用和 CLI。</p>
+<p align="center">用于管理多个相互隔离的 Claude Code 配置档案的 macOS 应用和 CLI。<br><a href="https://oreodeck.vercel.app">访问 OreoDeck 网站</a></p>
 
 OreoDeck 支持并行使用多个 Claude 账户、为不同终端标签页固定配置档案、监控用量、迁移会话、选择性共享全局资源，并在账户达到用量限制时故障转移。完整命令为 `oreodeck`，`ord` 是功能相同的短别名。
 
