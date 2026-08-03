@@ -23,12 +23,27 @@ pub enum ProfileKind {
     Gateway,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, uniffi::Record)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GatewayModelMappings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opus: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sonnet: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub haiku: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fable: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Profile {
     pub name: String,
     pub kind: ProfileKind,
     #[serde(rename = "gatewayBaseUrl", skip_serializing_if = "Option::is_none")]
     pub gateway_base_url: Option<String>,
+    #[serde(rename = "modelMappings", skip_serializing_if = "Option::is_none")]
+    pub model_mappings: Option<GatewayModelMappings>,
     /// Trường lạ (chưa biết ở phiên bản Rust này) — giữ nguyên qua round-trip
     /// thay vì bị xóa khi app ghi lại config.json, khớp tính lossless của TS
     /// (`readJson` → mutate → `JSON.stringify`, không đi qua struct cố định
@@ -74,6 +89,7 @@ pub enum StoreError {
     SharedResource(String),
     InvalidTerminal(String),
     InvalidGatewayBaseUrl(String),
+    InvalidGatewayModelMappings(String),
 }
 
 impl StoreError {
@@ -101,6 +117,9 @@ impl StoreError {
             ),
             StoreError::InvalidGatewayBaseUrl(_) => {
                 "Gateway URL must be an absolute HTTPS URL or a loopback HTTP URL, without credentials, a query, or a fragment.".to_string()
+            }
+            StoreError::InvalidGatewayModelMappings(_) => {
+                "Gateway model IDs must not contain control characters.".to_string()
             }
         }
     }
@@ -512,6 +531,37 @@ pub fn normalize_gateway_base_url(value: &str) -> Result<String, StoreError> {
     Ok(url.to_string())
 }
 
+fn normalize_gateway_model_id(
+    family: &str,
+    value: Option<String>,
+) -> Result<Option<String>, StoreError> {
+    let Some(value) = value else { return Ok(None) };
+    let normalized = value.trim().to_string();
+    if normalized.is_empty() {
+        return Ok(None);
+    }
+    if normalized.chars().any(|character| character.is_control()) {
+        return Err(StoreError::InvalidGatewayModelMappings(family.to_string()));
+    }
+    Ok(Some(normalized))
+}
+
+pub fn normalize_gateway_model_mappings(
+    mappings: GatewayModelMappings,
+) -> Result<Option<GatewayModelMappings>, StoreError> {
+    let normalized = GatewayModelMappings {
+        opus: normalize_gateway_model_id("opus", mappings.opus)?,
+        sonnet: normalize_gateway_model_id("sonnet", mappings.sonnet)?,
+        haiku: normalize_gateway_model_id("haiku", mappings.haiku)?,
+        fable: normalize_gateway_model_id("fable", mappings.fable)?,
+    };
+    if normalized == GatewayModelMappings::default() {
+        Ok(None)
+    } else {
+        Ok(Some(normalized))
+    }
+}
+
 fn validate_config(config: Config) -> Result<Config, StoreError> {
     for profile in &config.profiles {
         match profile.kind {
@@ -522,9 +572,20 @@ fn validate_config(config: Config) -> Result<Config, StoreError> {
                 if normalize_gateway_base_url(base_url).ok().as_deref() != Some(base_url) {
                     return Err(StoreError::CorruptConfig);
                 }
+                if let Some(mappings) = profile.model_mappings.clone() {
+                    let Some(normalized) = normalize_gateway_model_mappings(mappings.clone())
+                        .ok()
+                        .flatten()
+                    else {
+                        return Err(StoreError::CorruptConfig);
+                    };
+                    if normalized != mappings {
+                        return Err(StoreError::CorruptConfig);
+                    }
+                }
             }
             ProfileKind::Subscription | ProfileKind::ApiKey
-                if profile.gateway_base_url.is_some() =>
+                if profile.gateway_base_url.is_some() || profile.model_mappings.is_some() =>
             {
                 return Err(StoreError::CorruptConfig);
             }
@@ -654,6 +715,7 @@ fn add_profile_record(
     name: &str,
     kind: ProfileKind,
     gateway_base_url: Option<String>,
+    model_mappings: Option<GatewayModelMappings>,
 ) -> Result<(), StoreError> {
     assert_valid_name(name)?;
     update_config(|c| {
@@ -665,6 +727,7 @@ fn add_profile_record(
             name: name.to_string(),
             kind,
             gateway_base_url,
+            model_mappings,
             extra: serde_json::Map::new(),
         });
         c.failover_order.push(name.to_string());
@@ -679,15 +742,43 @@ pub fn add_profile(name: &str, kind: ProfileKind) -> Result<(), StoreError> {
     if matches!(kind, ProfileKind::Gateway) {
         return Err(StoreError::InvalidGatewayBaseUrl(String::new()));
     }
-    add_profile_record(name, kind, None)
+    add_profile_record(name, kind, None, None)
 }
 
 pub fn add_gateway_profile(name: &str, base_url: &str) -> Result<(), StoreError> {
+    add_gateway_profile_with_mappings(name, base_url, GatewayModelMappings::default())
+}
+
+pub fn add_gateway_profile_with_mappings(
+    name: &str,
+    base_url: &str,
+    model_mappings: GatewayModelMappings,
+) -> Result<(), StoreError> {
     add_profile_record(
         name,
         ProfileKind::Gateway,
         Some(normalize_gateway_base_url(base_url)?),
+        normalize_gateway_model_mappings(model_mappings)?,
     )
+}
+
+pub fn update_gateway_model_mappings(
+    name: &str,
+    model_mappings: GatewayModelMappings,
+) -> Result<(), StoreError> {
+    let canonical = normalize_gateway_model_mappings(model_mappings)?;
+    update_config(|config| {
+        let profile = config
+            .profiles
+            .iter_mut()
+            .find(|profile| profile.name.eq_ignore_ascii_case(name))
+            .ok_or_else(|| StoreError::NotFound(name.to_string()))?;
+        if profile.kind != ProfileKind::Gateway {
+            return Err(StoreError::InvalidGatewayModelMappings(name.to_string()));
+        }
+        profile.model_mappings = canonical;
+        Ok(())
+    })
 }
 
 /// Xóa profile: hủy tài nguyên TRƯỚC (thư mục), commit config SAU. Keychain do
@@ -892,6 +983,38 @@ mod tests {
 
     #[test]
     #[serial]
+    fn load_config_rejects_gateway_model_mappings_outside_a_gateway_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        std::fs::write(
+            config_path(),
+            br#"{"profiles":[{"name":"bot","kind":"api-key","modelMappings":{"opus":"provider/opus"}}],"active":"bot","failoverEnabled":true,"failoverOrder":["bot"]}"#,
+        )
+        .unwrap();
+
+        let error = load_config().unwrap_err();
+        env::remove_var("CCM_HOME");
+        assert!(matches!(error, StoreError::CorruptConfig));
+    }
+
+    #[test]
+    #[serial]
+    fn load_config_rejects_gateway_model_mappings_with_control_characters() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        std::fs::write(
+            config_path(),
+            br#"{"profiles":[{"name":"gateway","kind":"gateway","gatewayBaseUrl":"https://gateway.example.com/","modelMappings":{"sonnet":"provider\nsecret"}}],"active":"gateway","failoverEnabled":true,"failoverOrder":["gateway"]}"#,
+        )
+        .unwrap();
+
+        let error = load_config().unwrap_err();
+        env::remove_var("CCM_HOME");
+        assert!(matches!(error, StoreError::CorruptConfig));
+    }
+
+    #[test]
+    #[serial]
     fn add_gateway_profile_normalizes_its_url() {
         let dir = tempfile::tempdir().unwrap();
         set_home(dir.path());
@@ -920,6 +1043,41 @@ mod tests {
             Err(StoreError::InvalidGatewayBaseUrl(_))
         ));
         env::remove_var("CCM_HOME");
+    }
+
+    #[test]
+    #[serial]
+    fn gateway_model_mappings_are_canonical_and_replaceable() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        add_gateway_profile_with_mappings(
+            "gateway",
+            "https://gateway.example.com",
+            GatewayModelMappings {
+                opus: Some(" provider/opus ".to_string()),
+                fable: Some("provider/fable".to_string()),
+                ..GatewayModelMappings::default()
+            },
+        )
+        .unwrap();
+        update_gateway_model_mappings(
+            "gateway",
+            GatewayModelMappings {
+                sonnet: Some("provider/sonnet".to_string()),
+                ..GatewayModelMappings::default()
+            },
+        )
+        .unwrap();
+
+        let profile = get_profile("gateway").unwrap().unwrap();
+        env::remove_var("CCM_HOME");
+        assert_eq!(
+            profile.model_mappings,
+            Some(GatewayModelMappings {
+                sonnet: Some("provider/sonnet".to_string()),
+                ..GatewayModelMappings::default()
+            })
+        );
     }
 
     #[test]
@@ -1152,6 +1310,14 @@ mod tests {
         assert_eq!(
             c.profiles[2].gateway_base_url.as_deref(),
             Some("https://gateway.example.com/anthropic")
+        );
+        assert_eq!(
+            c.profiles[2].model_mappings,
+            Some(GatewayModelMappings {
+                opus: Some("provider/opus".to_string()),
+                fable: Some("provider/fable".to_string()),
+                ..GatewayModelMappings::default()
+            })
         );
         assert_eq!(c.active.as_deref(), Some("Work"));
         assert!(c.failover_enabled);

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import {
   loadConfig, saveConfig, addProfile, addGatewayProfile, removeProfile, setActive,
-  getProfile, resolveProfileName,
+  getProfile, resolveProfileName, updateGatewayModelMappings,
 } from "./profile-store";
 import { profileDir } from "./paths";
 
@@ -69,6 +69,51 @@ test("addGatewayProfile rejects insecure remote URLs and secret-bearing URLs", a
   await expect(addGatewayProfile("remote", "http://gateway.example.com")).rejects.toThrow("HTTPS");
   await expect(addGatewayProfile("credentialed", "https://token@gateway.example.com")).rejects.toThrow("credentials");
   await expect(addGatewayProfile("query", "https://gateway.example.com/?token=secret")).rejects.toThrow("query");
+});
+
+test("gateway model mappings are canonical and only valid on gateway profiles", async () => {
+  await addGatewayProfile("gateway", "https://gateway.example.com", {
+    opus: " provider/opus ",
+    fable: "provider/fable",
+  });
+  await expect(loadConfig()).resolves.toMatchObject({
+    profiles: [{
+      name: "gateway",
+      modelMappings: { opus: "provider/opus", fable: "provider/fable" },
+    }],
+  });
+
+  await writeFile(join(dir, "config.json"), JSON.stringify({
+    profiles: [{
+      name: "bad",
+      kind: "api-key",
+      modelMappings: { sonnet: "provider/sonnet" },
+    }],
+    active: "bad",
+    failoverEnabled: true,
+    failoverOrder: ["bad"],
+  }));
+  await expect(loadConfig()).rejects.toThrow("invalid structure");
+});
+
+test("gateway model mappings reject control characters", async () => {
+  await expect(addGatewayProfile("bad", "https://gateway.example.com", {
+    sonnet: "provider/sonnet\nsecret",
+  })).rejects.toThrow("model ID");
+});
+
+test("updateGatewayModelMappings replaces and clears mappings only on gateway profiles", async () => {
+  await addGatewayProfile("gateway", "https://gateway.example.com", { opus: "provider/old" });
+  await updateGatewayModelMappings("gateway", { sonnet: " provider/sonnet ", haiku: "provider/fast" });
+  expect((await getProfile("gateway"))?.modelMappings).toEqual({
+    sonnet: "provider/sonnet",
+    haiku: "provider/fast",
+  });
+  await updateGatewayModelMappings("gateway", {});
+  expect((await getProfile("gateway"))?.modelMappings).toBeUndefined();
+
+  await addProfile("bot", "api-key");
+  await expect(updateGatewayModelMappings("bot", { opus: "provider/opus" })).rejects.toThrow("not a gateway");
 });
 
 test("addProfile persists the profile and creates its config dir", async () => {

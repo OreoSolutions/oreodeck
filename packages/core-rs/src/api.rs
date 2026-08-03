@@ -35,6 +35,7 @@ impl From<store::StoreError> for CcmError {
             store::StoreError::SharedResource(_) => CcmError::Io { message },
             store::StoreError::InvalidTerminal(_) => CcmError::Io { message },
             store::StoreError::InvalidGatewayBaseUrl(_) => CcmError::Io { message },
+            store::StoreError::InvalidGatewayModelMappings(_) => CcmError::Io { message },
         }
     }
 }

@@ -6,10 +6,22 @@ import { ensureBuiltinOreoDeckSkill } from "./builtin-skills";
 
 export type ProfileKind = "subscription" | "api-key" | "gateway";
 
+const GATEWAY_MODEL_MAPPING_KEYS = ["opus", "sonnet", "haiku", "fable"] as const;
+
+export type GatewayModelMappingKey = typeof GATEWAY_MODEL_MAPPING_KEYS[number];
+
+export interface GatewayModelMappings {
+  opus?: string;
+  sonnet?: string;
+  haiku?: string;
+  fable?: string;
+}
+
 export interface Profile {
   name: string;
   kind: ProfileKind;
   gatewayBaseUrl?: string;
+  modelMappings?: GatewayModelMappings;
   sharedResources?: string[];
 }
 
@@ -57,6 +69,35 @@ export function normalizeGatewayBaseUrl(value: string): string {
   return url.toString();
 }
 
+/** Model IDs are non-secret provider routing identifiers. Keep their accepted
+ * syntax broad, but reject control characters before they reach a process env. */
+export function normalizeGatewayModelMappings(value: unknown): GatewayModelMappings {
+  if (!isRecord(value)) throw new Error("Gateway model mappings must be an object.");
+  for (const key of Object.keys(value)) {
+    if (!GATEWAY_MODEL_MAPPING_KEYS.includes(key as GatewayModelMappingKey)) {
+      throw new Error(`Unsupported gateway model mapping "${key}".`);
+    }
+  }
+  const normalized: GatewayModelMappings = {};
+  for (const key of GATEWAY_MODEL_MAPPING_KEYS) {
+    const item = value[key];
+    if (item === undefined) continue;
+    if (typeof item !== "string") throw new Error(`Gateway ${key} model ID must be a string.`);
+    const modelId = item.trim();
+    if (!modelId) continue;
+    if (/[\u0000-\u001F\u007F]/.test(modelId)) {
+      throw new Error(`Gateway ${key} model ID cannot contain control characters.`);
+    }
+    normalized[key] = modelId;
+  }
+  return normalized;
+}
+
+function canonicalGatewayModelMappings(value: unknown): GatewayModelMappings | undefined {
+  const mappings = normalizeGatewayModelMappings(value);
+  return Object.keys(mappings).length > 0 ? mappings : undefined;
+}
+
 /** Runtime half of the TS/Rust disk contract. Type assertions alone do not
  * protect the CLI from valid JSON with the wrong shape. Unknown fields remain
  * on the original object and therefore survive writes for forward compatibility. */
@@ -78,7 +119,13 @@ export function validateConfig(value: unknown): Config {
           normalizeGatewayBaseUrl(profile.gatewayBaseUrl) !== profile.gatewayBaseUrl) {
         throw new Error("The OreoDeck config file has an invalid gateway URL and could not be read.");
       }
-    } else if (profile.gatewayBaseUrl !== undefined) {
+      if (profile.modelMappings !== undefined) {
+        const mappings = canonicalGatewayModelMappings(profile.modelMappings);
+        if (!mappings || JSON.stringify(mappings) !== JSON.stringify(profile.modelMappings)) {
+          throw new Error("The OreoDeck config file has invalid gateway model mappings and could not be read.");
+        }
+      }
+    } else if (profile.gatewayBaseUrl !== undefined || profile.modelMappings !== undefined) {
       throw new Error("The OreoDeck config file has an invalid structure and could not be read.");
     }
     if (profile.sharedResources !== undefined &&
@@ -139,13 +186,23 @@ export async function getProfile(name: string): Promise<Profile | null> {
   return findProfile(c.profiles, name) ?? null;
 }
 
-async function addProfileRecord(name: string, kind: ProfileKind, gatewayBaseUrl?: string): Promise<void> {
+async function addProfileRecord(
+  name: string,
+  kind: ProfileKind,
+  gatewayBaseUrl?: string,
+  modelMappings?: GatewayModelMappings,
+): Promise<void> {
   assertValidName(name);
   await updateConfig(async (c) => {
     if (findProfile(c.profiles, name)) throw new Error(`Profile "${name}" already exists.`);
     await mkdir(profileDir(name), { recursive: true });
     await ensureBuiltinOreoDeckSkill(name);
-    c.profiles.push({ name, kind, ...(gatewayBaseUrl ? { gatewayBaseUrl } : {}) });
+    c.profiles.push({
+      name,
+      kind,
+      ...(gatewayBaseUrl ? { gatewayBaseUrl } : {}),
+      ...(modelMappings ? { modelMappings } : {}),
+    });
     c.failoverOrder.push(name);
     c.active ??= name;
   });
@@ -155,8 +212,31 @@ export async function addProfile(name: string, kind: Exclude<ProfileKind, "gatew
   await addProfileRecord(name, kind);
 }
 
-export async function addGatewayProfile(name: string, baseUrl: string): Promise<void> {
-  await addProfileRecord(name, "gateway", normalizeGatewayBaseUrl(baseUrl));
+export async function addGatewayProfile(
+  name: string,
+  baseUrl: string,
+  modelMappings?: GatewayModelMappings,
+): Promise<void> {
+  await addProfileRecord(
+    name,
+    "gateway",
+    normalizeGatewayBaseUrl(baseUrl),
+    modelMappings === undefined ? undefined : canonicalGatewayModelMappings(modelMappings),
+  );
+}
+
+export async function updateGatewayModelMappings(
+  name: string,
+  modelMappings: GatewayModelMappings,
+): Promise<void> {
+  const canonical = canonicalGatewayModelMappings(modelMappings);
+  await updateConfig((c) => {
+    const profile = findProfile(c.profiles, name);
+    if (!profile) throw new Error(`Profile "${name}" not found.`);
+    if (profile.kind !== "gateway") throw new Error(`Profile "${profile.name}" is not a gateway profile.`);
+    if (canonical) profile.modelMappings = canonical;
+    else delete profile.modelMappings;
+  });
 }
 
 export async function removeProfile(name: string): Promise<void> {

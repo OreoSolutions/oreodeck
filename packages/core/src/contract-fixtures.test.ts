@@ -47,7 +47,12 @@ test("config.json fixture round-trips with canonical casing and known fields pre
   expect(c.profiles).toEqual([
     { name: "Work", kind: "subscription" },
     { name: "bot", kind: "api-key" },
-    { name: "gateway", kind: "gateway", gatewayBaseUrl: "https://gateway.example.com/anthropic" },
+    {
+      name: "gateway",
+      kind: "gateway",
+      gatewayBaseUrl: "https://gateway.example.com/anthropic",
+      modelMappings: { opus: "provider/opus", fable: "provider/fable" },
+    },
   ]);
   expect(c.active).toBe("Work"); // canonical casing preserved, not lowercased
   expect(c.failoverEnabled).toBe(true);

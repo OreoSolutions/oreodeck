@@ -2,7 +2,15 @@
   "profiles": [
     { "name": "Work", "kind": "subscription" },
     { "name": "bot", "kind": "api-key" },
-    { "name": "gateway", "kind": "gateway", "gatewayBaseUrl": "https://gateway.example.com/anthropic" }
+    {
+      "name": "gateway",
+      "kind": "gateway",
+      "gatewayBaseUrl": "https://gateway.example.com/anthropic",
+      "modelMappings": {
+        "opus": "provider/opus",
+        "fable": "provider/fable"
+      }
+    }
   ],
   "active": "Work",
   "failoverEnabled": true,
