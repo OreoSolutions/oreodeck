@@ -1,4 +1,8 @@
 use crate::{keychain, store, terminal, usage};
+use serde::Deserialize;
+use std::collections::HashSet;
+use std::time::Duration;
+use url::Url;
 
 /// Typed error surface for Swift. Replaces the old webview app's stringly
 /// `Result<_, String>` (whose `"CONFIG_CORRUPT"` sentinel leaked raw to
@@ -93,6 +97,143 @@ pub struct ProfileUsageView {
 pub struct FailoverView {
     pub enabled: bool,
     pub order: Vec<String>,
+}
+
+/// Display-safe outcome of a one-off gateway `/models` request. This record
+/// intentionally contains only public endpoint metadata; it never contains a
+/// Keychain token, response body, or raw transport error.
+#[derive(Debug, uniffi::Record)]
+pub struct GatewayConnectionView {
+    pub state: String,
+    pub endpoint: String,
+    pub model_count: u32,
+    pub message: String,
+}
+
+#[derive(Deserialize)]
+struct GatewayModelsResponse {
+    data: Vec<GatewayModel>,
+}
+
+#[derive(Deserialize)]
+struct GatewayModel {
+    id: String,
+}
+
+fn gateway_connection(
+    state: &str,
+    endpoint: &str,
+    model_count: u32,
+    message: &str,
+) -> GatewayConnectionView {
+    GatewayConnectionView {
+        state: state.to_string(),
+        endpoint: endpoint.to_string(),
+        model_count,
+        message: message.to_string(),
+    }
+}
+
+/// Turns an HTTP response into safe UI data. The body is parsed only for the
+/// `data[].id` shape advertised by OpenAI-compatible model endpoints; neither
+/// the body nor parser errors cross the FFI boundary.
+fn gateway_connection_from_http_response(
+    endpoint: &str,
+    status: u16,
+    body: &str,
+) -> GatewayConnectionView {
+    match status {
+        200..=299 => match serde_json::from_str::<GatewayModelsResponse>(body) {
+            Ok(models) => {
+                let count = models
+                    .data
+                    .into_iter()
+                    .map(|model| model.id)
+                    .filter(|id| !id.trim().is_empty())
+                    .collect::<HashSet<_>>()
+                    .len() as u32;
+                let noun = if count == 1 { "model" } else { "models" };
+                gateway_connection(
+                    "connected",
+                    endpoint,
+                    count,
+                    &format!("Connected — {count} {noun} available."),
+                )
+            }
+            Err(_) => gateway_connection(
+                "unexpected-response",
+                endpoint,
+                0,
+                "The gateway returned an unexpected model list.",
+            ),
+        },
+        401 | 403 => gateway_connection(
+            "unauthorized",
+            endpoint,
+            0,
+            "The gateway rejected this profile's API key.",
+        ),
+        _ => gateway_connection(
+            "unexpected-response",
+            endpoint,
+            0,
+            "The gateway returned an unexpected response.",
+        ),
+    }
+}
+
+fn gateway_connection_transport_failure(endpoint: &str) -> GatewayConnectionView {
+    gateway_connection(
+        "unreachable",
+        endpoint,
+        0,
+        "Could not reach the gateway. Check its URL and network access.",
+    )
+}
+
+fn gateway_models_endpoint(base_url: &str) -> Option<String> {
+    let mut url = Url::parse(base_url).ok()?;
+    let path = url.path().trim_end_matches('/');
+    url.set_path(&format!("{path}/models"));
+    url.set_query(None);
+    url.set_fragment(None);
+    Some(url.into())
+}
+
+fn check_gateway_connection_with<F>(
+    endpoint: &str,
+    token: Option<&str>,
+    get: F,
+) -> GatewayConnectionView
+where
+    F: FnOnce(&str, Option<&str>) -> Result<(u16, String), ()>,
+{
+    match get(endpoint, token) {
+        Ok((status, body)) => gateway_connection_from_http_response(endpoint, status, &body),
+        Err(()) => gateway_connection_transport_failure(endpoint),
+    }
+}
+
+fn request_gateway_models(endpoint: &str, token: Option<&str>) -> Result<(u16, String), ()> {
+    let agent = ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(5))
+        .timeout_read(Duration::from_secs(5))
+        .timeout_write(Duration::from_secs(5))
+        .redirects(0)
+        .build();
+    let mut request = agent.get(endpoint).set("Accept", "application/json");
+    if let Some(token) = token.filter(|token| !token.is_empty()) {
+        request = request.set("Authorization", &format!("Bearer {token}"));
+    }
+    match request.call() {
+        Ok(response) => {
+            let status = response.status();
+            let body = response.into_string().map_err(|_| ())?;
+            Ok((status, body))
+        }
+        Err(ureq::Error::Status(status, _)) => Ok((status, String::new())),
+        Err(_) => Err(()),
+    }
 }
 
 fn kind_str(k: store::ProfileKind) -> String {
@@ -260,6 +401,31 @@ pub fn update_gateway_model_mappings(
     model_mappings: store::GatewayModelMappings,
 ) -> Result<(), CcmError> {
     Ok(store::update_gateway_model_mappings(&name, model_mappings)?)
+}
+
+/// Checks only the gateway's OpenAI-compatible model index. The Keychain token
+/// is read and attached inside this Rust boundary, then discarded; Swift gets
+/// the safe `GatewayConnectionView` record only.
+#[uniffi::export]
+pub fn check_gateway_connection(name: String) -> Result<GatewayConnectionView, CcmError> {
+    let profile = store::get_profile(&name)?.ok_or_else(|| CcmError::NotFound { name })?;
+    if profile.kind != store::ProfileKind::Gateway {
+        return Err(CcmError::Io {
+            message: "Only gateway profiles can be checked.".to_string(),
+        });
+    }
+    let base_url = profile.gateway_base_url.ok_or_else(|| CcmError::Io {
+        message: "This gateway profile has no URL to check.".to_string(),
+    })?;
+    let endpoint = gateway_models_endpoint(&base_url).ok_or_else(|| CcmError::Io {
+        message: "This gateway profile has an invalid URL.".to_string(),
+    })?;
+    let token = keychain::get_api_key(&profile.name)?;
+    Ok(check_gateway_connection_with(
+        &endpoint,
+        token.as_deref(),
+        request_gateway_models,
+    ))
 }
 
 /// Testable core of `remove_profile`. Resolves the CANONICAL stored name
@@ -682,5 +848,58 @@ mod tests {
             assert_eq!(views[0].total_tokens, 0);
             assert_eq!(views[0].reset_at_ms, None);
         });
+    }
+
+    // A gateway can report the same model through more than one capability
+    // record. The dashboard must show the distinct model count, not inflate
+    // it by counting duplicate IDs. Returning the wrong state or count would
+    // make this test fail.
+    #[test]
+    fn gateway_connection_counts_distinct_advertised_models() {
+        let result = gateway_connection_from_http_response(
+            "https://gateway.example.com/v1/models",
+            200,
+            r#"{"data":[{"id":"cx/large"},{"id":"cx/large"},{"id":"cx/fast"}]}"#,
+        );
+
+        assert_eq!(result.state, "connected");
+        assert_eq!(result.endpoint, "https://gateway.example.com/v1/models");
+        assert_eq!(result.model_count, 2);
+        assert_eq!(result.message, "Connected — 2 models available.");
+    }
+
+    // An authentication rejection is actionable and fundamentally different
+    // from an offline endpoint. Collapsing 401 into "unreachable" would send
+    // the user to diagnose the wrong problem.
+    #[test]
+    fn gateway_connection_reports_unauthorized_without_request_secrets() {
+        let result = gateway_connection_from_http_response(
+            "https://gateway.example.com/v1/models",
+            401,
+            "not authorized",
+        );
+
+        assert_eq!(result.state, "unauthorized");
+        assert_eq!(result.model_count, 0);
+        assert_eq!(
+            result.message,
+            "The gateway rejected this profile's API key."
+        );
+        assert!(!format!("{result:?}").contains("sk-ant-supersecret"));
+    }
+
+    // Network failures must produce a safe, helpful state without exposing
+    // client-library errors, URLs with embedded credentials, or Keychain data.
+    #[test]
+    fn gateway_connection_reports_unreachable_without_transport_detail() {
+        let result = gateway_connection_transport_failure("https://gateway.example.com/v1/models");
+
+        assert_eq!(result.state, "unreachable");
+        assert_eq!(result.model_count, 0);
+        assert_eq!(
+            result.message,
+            "Could not reach the gateway. Check its URL and network access."
+        );
+        assert!(!format!("{result:?}").contains("sk-ant-supersecret"));
     }
 }
