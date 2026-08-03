@@ -11,6 +11,8 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Added isolated Anthropic-compatible gateway profiles. Each profile stores its
   HTTPS gateway URL in config and its token only in macOS Keychain.
+- Gateway profiles can optionally map Claude Code's Opus, Sonnet, Haiku, and
+  Fable model families to provider-specific model IDs.
 
 ## [0.1.10] - 2026-08-03
 

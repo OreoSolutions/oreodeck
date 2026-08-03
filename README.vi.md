@@ -75,6 +75,15 @@ Gateway phải tương thích API Anthropic. Gateway từ xa bắt buộc dùng 
 HTTP chỉ được dùng cho gateway loopback khi phát triển. Token gateway chỉ nằm
 trong Keychain.
 
+Có thể map từng family model Claude sang model ID của provider. Bỏ trống một
+family thì Claude Code giữ model mặc định:
+
+```bash
+oreodeck add team-gateway --gateway https://gateway.example.com/anthropic \
+  --opus-model provider/large --sonnet-model provider/general \
+  --haiku-model provider/fast --fable-model provider/reasoning
+```
+
 Chạy một lần bằng profile khác:
 
 ```bash

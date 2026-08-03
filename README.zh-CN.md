@@ -74,6 +74,15 @@ ord run
 网关必须兼容 Anthropic API。远程网关必须使用 HTTPS；HTTP 仅允许用于本地
 loopback 开发网关。网关 token 仅保存在 Keychain 中。
 
+也可以把 Claude 模型系列映射到 provider 接受的模型 ID；省略某个系列时，
+Claude Code 保持其默认模型：
+
+```bash
+oreodeck add team-gateway --gateway https://gateway.example.com/anthropic \
+  --opus-model provider/large --sonnet-model provider/general \
+  --haiku-model provider/fast --fable-model provider/reasoning
+```
+
 为单次调用覆盖配置档案：
 
 ```bash

@@ -111,6 +111,15 @@ HTTP. The gateway token stays in Keychain:
 oreodeck add team-gateway --gateway https://gateway.example.com/anthropic
 ```
 
+Optionally map Claude Code model families to IDs accepted by that gateway.
+Leave any family out to keep Claude Code's default model:
+
+```bash
+oreodeck add team-gateway --gateway https://gateway.example.com/anthropic \
+  --opus-model provider/large --sonnet-model provider/general \
+  --haiku-model provider/fast --fable-model provider/reasoning
+```
+
 List profiles, choose the global default, and launch Claude:
 
 ```bash
