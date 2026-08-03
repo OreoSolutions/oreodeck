@@ -13,6 +13,16 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   HTTPS gateway URL in config and its token only in macOS Keychain.
 - Gateway profiles can optionally map Claude Code's Opus, Sonnet, Haiku, and
   Fable model families to provider-specific model IDs.
+- Added an on-demand, Keychain-safe gateway connection check. It queries only
+  the provider's `/models` endpoint and reports connected, unauthorized,
+  unreachable, or unexpected-response status without sending a completion.
+
+### Changed
+
+- Refreshed the complete macOS dashboard as the Calm Control Center: a clearer
+  charcoal-and-terracotta sidebar, consistent task cards, profile detail and
+  model-alias views, a current-profile Usage summary, an explicit Failover
+  state, grouped CLI tools, and easier-to-scan Settings.
 
 ## [0.1.10] - 2026-08-03
 

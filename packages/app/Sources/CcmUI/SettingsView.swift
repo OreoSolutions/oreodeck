@@ -175,7 +175,7 @@ public struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Software update").font(.headline)
+                                Text("App updates").font(.headline)
                                 Text("Installed version \(model.currentVersion)")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)

@@ -33,18 +33,18 @@ public struct DashboardView: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 10) {
                     ZStack {
-                        Circle().fill(OreoTheme.chocolate)
-                        Image(systemName: "circle.grid.3x3.fill")
+                        RoundedRectangle(cornerRadius: 11).fill(OreoTheme.terracotta)
+                        Image(systemName: "rectangle.stack.fill")
                             .font(.title3)
-                            .foregroundStyle(OreoTheme.cream)
+                            .foregroundStyle(.white)
                     }
                     .frame(width: 34, height: 34)
 
                     VStack(alignment: .leading, spacing: 1) {
-                        Text("OreoDeck").font(.headline)
-                        Text("Claude identity manager")
+                        Text("OreoDeck").font(.headline).foregroundStyle(.white)
+                        Text("Claude Code companion")
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.white.opacity(0.58))
                     }
                 }
                 .padding(.horizontal, 8)
@@ -55,17 +55,20 @@ public struct DashboardView: View {
                             section = item
                         } label: {
                             HStack(spacing: 10) {
+                                Capsule()
+                                    .fill(section == item ? OreoTheme.terracotta : .clear)
+                                    .frame(width: 3, height: 18)
                                 Image(systemName: item.icon)
                                     .frame(width: 18)
                                 Text(item.rawValue)
                                 Spacer()
                             }
                             .font(.callout.weight(section == item ? .semibold : .regular))
-                            .foregroundStyle(section == item ? OreoTheme.chocolate : Color.primary)
+                            .foregroundStyle(section == item ? OreoTheme.terracotta : Color.white.opacity(0.82))
                             .padding(.horizontal, 11)
                             .padding(.vertical, 9)
                             .background(
-                                section == item ? OreoTheme.cream.opacity(0.72) : Color.clear,
+                                section == item ? OreoTheme.terracotta.opacity(0.11) : Color.clear,
                                 in: RoundedRectangle(cornerRadius: 10)
                             )
                             // Plain buttons otherwise hit-test mostly around
@@ -92,6 +95,7 @@ public struct DashboardView: View {
                     VStack(alignment: .leading, spacing: 5) {
                         Text("OreoDeck")
                             .font(.headline)
+                            .foregroundStyle(.white)
                         HStack(spacing: 7) {
                             Text("v\(model.currentVersion)")
                             Image(systemName: updateStatusIcon)
@@ -115,19 +119,25 @@ public struct DashboardView: View {
                 .accessibilityLabel("OreoDeck v\(model.currentVersion), \(updateStatusText). Open update settings")
                 .help("Open update settings")
 
-                HStack(spacing: 7) {
-                    Circle().fill(model.cliMissing ? Color.orange : OreoTheme.cyan)
-                        .frame(width: 7, height: 7)
-                    Text(model.cliMissing ? "CLI needs setup" : "CLI connected")
-                        .font(.caption)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("System status")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                    OreoStatusRow(
+                        title: model.cliMissing ? "CLI needs setup" : "CLI connected",
+                        detail: model.cliMissing ? "Install ord to launch sessions" : "Ready to open sessions",
+                        color: model.cliMissing ? .orange : .green,
+                        systemImage: model.cliMissing ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
+                    )
                 }
-                .padding(.horizontal, 9)
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(OreoTheme.card.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
             }
             .padding(14)
             .frame(width: 210)
             .frame(maxHeight: .infinity)
-            .background(OreoTheme.card.opacity(0.55))
+            .background(OreoTheme.sidebar)
 
             Divider()
 

@@ -109,6 +109,22 @@ public struct UsageTab: View {
                     subtitle: "Account usage and reset times reported by Claude, separated by profile.",
                     systemImage: "chart.bar.xaxis"
                 )
+                if let active = model.rows.first(where: \.active) {
+                    OreoSectionCard("Current profile", subtitle: "The identity new Claude Code sessions use") {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(active.name).font(.title3.weight(.semibold))
+                                Text(active.kind == "subscription" ? "Claude account usage" : "Local request telemetry")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            StatusPill(
+                                text: active.planFiveHourPercent.map { "\(Int($0.rounded()))% used" } ?? "Ready",
+                                color: active.planFiveHourPercent ?? 0 >= 90 ? .red : OreoTheme.terracotta
+                            )
+                        }
+                    }
+                }
                 if let loadError = model.loadError {
                     // Must come before the `rows.isEmpty` check below: a
                     // config-read failure also leaves `rows` empty (see
@@ -126,7 +142,7 @@ public struct UsageTab: View {
                     )
                 } else {
                     ForEach(model.rows) { row in
-                        VStack(alignment: .leading, spacing: 12) {
+                        OreoSectionCard(row.name, subtitle: row.active ? "Active profile" : "Profile usage") {
                             HStack {
                                 Text(row.name).font(.headline)
                                 if row.active {

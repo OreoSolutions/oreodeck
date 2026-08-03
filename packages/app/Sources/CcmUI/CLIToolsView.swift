@@ -46,7 +46,7 @@ public struct CLIToolsView: View {
                     }
                 }
 
-                CommandSuggestions(model: model, title: "Shell & tab setup", commands: [
+                CommandSuggestions(model: model, title: "Launch & routing", commands: [
                     CLICommandSuggestion(
                         "oreodeck shell-init >> ~/.zshrc && source ~/.zshrc",
                         "Route the plain claude command through OreoDeck."
@@ -58,7 +58,7 @@ public struct CLIToolsView: View {
                     CLICommandSuggestion("type claude", "Verify that claude resolves to the OreoDeck shell function."),
                 ])
 
-                CommandSuggestions(model: model, title: "Optional app", commands: [
+                CommandSuggestions(model: model, title: "Dashboard setup", commands: [
                     CLICommandSuggestion("ord ui install", "Install the cached OreoDeck.app without Bun or Rust."),
                     CLICommandSuggestion("ord ui open", "Open the installed dashboard."),
                     CLICommandSuggestion("ord ui remove", "Remove only the UI while keeping CLI and profiles."),
@@ -66,7 +66,7 @@ public struct CLIToolsView: View {
                     CLICommandSuggestion("ord update", "Download, verify and install an available update."),
                 ])
 
-                CommandSuggestions(model: model, title: "Package lifecycle", commands: [
+                CommandSuggestions(model: model, title: "Maintenance", commands: [
                     CLICommandSuggestion("ord uninstall", "Remove app, CLI and shell integration while preserving profiles."),
                     CLICommandSuggestion("ord uninstall --purge", "Permanently remove OreoDeck and every managed profile."),
                 ])

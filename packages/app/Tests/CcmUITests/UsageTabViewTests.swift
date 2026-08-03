@@ -4,6 +4,16 @@ import ViewInspector
 
 @testable import CcmUI
 
+@MainActor
+@Test func usageTabNamesTheCurrentProfileSummary() async throws {
+    let backend = FakeBackend()
+    backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)])
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    #expect(try UsageTab(model: model).inspect().find(text: "Current profile").string() == "Current profile")
+}
+
 // Not the drag/bar-color pixel behavior — that has no automated equivalent
 // (see the Task 4 brief and docs/manual-smoke-test.md) — but the text-level
 // facts a regression can silently break: the empty state, the per-layer

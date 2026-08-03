@@ -14,8 +14,9 @@ public struct ProfilesTab: View {
 
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
-    public init(model: AppModel) {
+    public init(model: AppModel, initialSelection: ProfileRow.ID? = nil) {
         self.model = model
+        self._selection = State(initialValue: initialSelection)
     }
 
     private var selectedRow: ProfileRow? {
@@ -100,6 +101,12 @@ public struct ProfilesTab: View {
                     }
                 }
                 .frame(height: tableHeight)
+
+                if let selectedRow {
+                    ProfileDetailCard(row: selectedRow, connection: model.gatewayConnections[selectedRow.name]) {
+                        Task { await model.checkGatewayConnection(name: selectedRow.name) }
+                    }
+                }
             }
 
             HStack(spacing: 10) {
@@ -266,6 +273,85 @@ public struct ProfilesTab: View {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(Color.primary.opacity(0.06))
         }
+    }
+}
+
+private struct ProfileDetailCard: View {
+    let row: ProfileRow
+    let connection: GatewayConnectionView?
+    let checkConnection: () -> Void
+
+    var body: some View {
+        OreoSectionCard("Selected profile", subtitle: row.active ? "Active for new sessions" : "Ready when you are") {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(row.name).font(.title3.weight(.semibold))
+                    StatusPill(
+                        text: row.kind == "gateway" ? "Gateway" : row.kind == "api-key" ? "API key" : "Subscription",
+                        color: row.kind == "gateway" ? .purple : OreoTheme.terracotta
+                    )
+                }
+                Spacer()
+                if row.kind == "gateway" {
+                    Button(connection?.state == "checking" ? "Checking…" : "Check connection", action: checkConnection)
+                        .buttonStyle(.bordered)
+                        .disabled(connection?.state == "checking")
+                }
+            }
+
+            if row.kind == "gateway" {
+                Divider()
+                Text("Gateway connection").font(.subheadline.weight(.semibold))
+                OreoStatusRow(
+                    title: connection?.message ?? "Not checked yet",
+                    detail: connection?.endpoint.isEmpty == false ? connection!.endpoint : "Checks the provider's /models endpoint without sending a completion.",
+                    color: connectionColor,
+                    systemImage: connectionIcon
+                )
+                Text("Model aliases").font(.subheadline.weight(.semibold))
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    alias("Opus", row.modelMappings?.opus)
+                    alias("Sonnet", row.modelMappings?.sonnet)
+                    alias("Haiku", row.modelMappings?.haiku)
+                    alias("Fable", row.modelMappings?.fable)
+                }
+            } else {
+                Text("Use this profile for the next Claude Code session, or choose More to manage shared resources.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var connectionColor: Color {
+        switch connection?.state {
+        case "connected": .green
+        case "unauthorized": .orange
+        case "unreachable", "unexpected-response": .red
+        default: OreoTheme.terracotta
+        }
+    }
+
+    private var connectionIcon: String {
+        switch connection?.state {
+        case "connected": "checkmark.circle.fill"
+        case "unauthorized": "key.slash.fill"
+        case "unreachable", "unexpected-response": "exclamationmark.triangle.fill"
+        case "checking": "arrow.triangle.2.circlepath"
+        default: "network"
+        }
+    }
+
+    private func alias(_ family: String, _ id: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(family).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(id?.isEmpty == false ? id! : "Claude default")
+                .font(.caption.monospaced())
+                .lineLimit(1)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 9))
     }
 }
 

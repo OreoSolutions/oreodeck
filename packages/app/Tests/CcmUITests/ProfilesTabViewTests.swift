@@ -4,6 +4,25 @@ import ViewInspector
 
 @testable import CcmUI
 
+@MainActor
+@Test func selectedGatewayProfileShowsMappingAndConnectionActions() async throws {
+    let backend = FakeBackend()
+    backend.set(profiles: [
+        ProfileView(
+            name: "team", kind: "gateway", active: false, sharedResources: [],
+            modelMappings: GatewayModelMappings(opus: "cx/gpt-5.6-sol", sonnet: nil, haiku: nil, fable: nil)
+        )
+    ])
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    let tab = ProfilesTab(model: model, initialSelection: "team")
+
+    #expect(try tab.inspect().find(text: "Gateway connection").string() == "Gateway connection")
+    #expect(try tab.inspect().find(text: "Check connection").string() == "Check connection")
+    #expect(try tab.inspect().find(text: "cx/gpt-5.6-sol").string() == "cx/gpt-5.6-sol")
+}
+
 // Pins the Task 3 review's Critical finding: `AppModel.actionError` was set
 // on every failure path of the three new actions but nothing ever rendered
 // it. These tests exercise the real SwiftUI render tree via ViewInspector

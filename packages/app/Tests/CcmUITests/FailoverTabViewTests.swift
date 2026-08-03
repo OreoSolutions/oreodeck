@@ -5,6 +5,16 @@ import ViewInspector
 
 @testable import CcmUI
 
+@MainActor
+@Test func failoverTabExplainsAutomaticSwitchingState() async throws {
+    let backend = FakeBackend()
+    backend.set(failover: FailoverView(enabled: true, order: ["work"]))
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    #expect(try FailoverTab(model: model).inspect().find(text: "Automatic switching").string() == "Automatic switching")
+}
+
 // Pins the same Critical-finding pattern as `ProfilesTabViewTests.swift`:
 // a rejected toggle/reorder sets `AppModel.actionError`, and that value must
 // actually render, not just sit on the model unread. Verified by hand:

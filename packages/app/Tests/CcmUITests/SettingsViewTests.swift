@@ -4,6 +4,12 @@ import ViewInspector
 @testable import CcmUI
 
 @MainActor
+@Test func settingsViewGroupsApplicationUpdates() throws {
+    let view = SettingsView(model: AppModel(backend: FakeBackend()))
+    #expect(try view.inspect().find(text: "App updates").string() == "App updates")
+}
+
+@MainActor
 @Test func terminalPreferenceLoadsPersistsAndRunsCommandsThroughBackend() async {
     let backend = FakeBackend()
     backend.set(terminal: "ghostty")

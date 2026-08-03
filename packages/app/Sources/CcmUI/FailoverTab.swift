@@ -25,17 +25,18 @@ public struct FailoverTab: View {
                 ActionErrorBanner(message: actionError) { model.dismissActionError() }
             }
 
-            Toggle(
-                "Switch to the next profile automatically when one hits its limit",
-                isOn: Binding(
-                    get: { model.failover.enabled },
-                    set: { newValue in Task { await model.setFailoverEnabled(newValue) } }
+            OreoSectionCard("Automatic switching", subtitle: model.failover.enabled ? "Enabled — OreoDeck can continue with the next profile." : "Disabled — sessions stay on their selected profile.") {
+                Toggle(
+                    "Switch to the next profile automatically when one hits its limit",
+                    isOn: Binding(
+                        get: { model.failover.enabled },
+                        set: { newValue in Task { await model.setFailoverEnabled(newValue) } }
+                    )
                 )
-            )
-
-            Text("Order — OreoDeck tries these top to bottom. Drag to reorder.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text("Order — OreoDeck tries these top to bottom. Drag to reorder.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             if let loadError = model.loadError {
                 // Must come before the `order.isEmpty` check below: a
@@ -53,16 +54,18 @@ public struct FailoverTab: View {
                     systemImage: "arrow.triangle.branch",
                 )
             } else {
-                List {
-                    ForEach(model.failover.order, id: \.self) { name in
-                        HStack(spacing: 6) {
-                            Image(systemName: "line.3.horizontal")
-                                .foregroundStyle(.tertiary)
-                            Text(name)
+                OreoSectionCard("Fallback order", subtitle: "Reorder profiles to choose the recovery path.") {
+                    List {
+                        ForEach(model.failover.order, id: \.self) { name in
+                            HStack(spacing: 6) {
+                                Image(systemName: "line.3.horizontal")
+                                    .foregroundStyle(.tertiary)
+                                Text(name)
+                            }
                         }
-                    }
-                    .onMove { offsets, destination in
-                        Task { await model.moveFailover(fromOffsets: offsets, toOffset: destination) }
+                        .onMove { offsets, destination in
+                            Task { await model.moveFailover(fromOffsets: offsets, toOffset: destination) }
+                        }
                     }
                 }
             }
