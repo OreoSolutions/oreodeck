@@ -5,6 +5,39 @@ import Testing
 @testable import CcmUI
 
 @MainActor
+@Test func gatewayConnectionCheckPublishesOnlyTheRequestedProfilesResult() async {
+    let backend = FakeBackend()
+    backend.set(gatewayConnection: GatewayConnectionView(
+        state: "connected",
+        endpoint: "https://gateway.example.com/v1/models",
+        modelCount: 2,
+        message: "Connected — 2 models available."
+    ), for: "team")
+    let model = AppModel(backend: backend)
+
+    await model.checkGatewayConnection(name: "team")
+
+    #expect(backend.checkGatewayConnectionCalls == ["team"])
+    #expect(model.gatewayConnections["team"]?.state == "connected")
+    #expect(model.gatewayConnections["team"]?.modelCount == 2)
+    #expect(model.gatewayConnections["other"] == nil)
+}
+
+@MainActor
+@Test func gatewayConnectionCheckTurnsBackendFailureIntoASafeUnreachableState() async throws {
+    let backend = FakeBackend()
+    backend.gatewayConnectionError = .Io(message: "request failed for sk-ant-supersecret")
+    let model = AppModel(backend: backend)
+
+    await model.checkGatewayConnection(name: "team")
+
+    let result = try #require(model.gatewayConnections["team"])
+    #expect(result.state == "unreachable")
+    #expect(result.message == "Could not reach the gateway. Check its URL and network access.")
+    #expect(!result.message.contains("sk-ant-supersecret"))
+}
+
+@MainActor
 @Test func loadPopulatesRowsFailoverAndCliStatus() async {
     let backend = FakeBackend()
     backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)])

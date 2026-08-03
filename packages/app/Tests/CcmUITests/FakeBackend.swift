@@ -13,6 +13,7 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     private var _cliInstalled = true
     private var _terminal = "terminal"
     private var _listError: CcmError?
+    private var _gatewayConnectionResults: [String: GatewayConnectionView] = [:]
 
     private(set) var listCallCount = 0
     private(set) var setActiveCalls: [String] = []
@@ -23,6 +24,7 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     private(set) var addApiKeyCalls: [(name: String, key: String)] = []
     private(set) var addGatewayCalls: [(name: String, baseUrl: String, key: String, modelMappings: GatewayModelMappings)] = []
     private(set) var updateGatewayMappingCalls: [(name: String, modelMappings: GatewayModelMappings)] = []
+    private(set) var checkGatewayConnectionCalls: [String] = []
     private(set) var setFailoverEnabledCalls: [Bool] = []
     private(set) var setFailoverOrderCalls: [[String]] = []
     private(set) var openConfigCallCount = 0
@@ -35,6 +37,7 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     var openSessionError: CcmError?
     var setFailoverEnabledError: CcmError?
     var setFailoverOrderError: CcmError?
+    var gatewayConnectionError: CcmError?
 
     func set(profiles: [ProfileView], usage: [ProfileUsageView] = []) {
         lock.withLock {
@@ -46,6 +49,9 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     func set(cliInstalled: Bool) { lock.withLock { _cliInstalled = cliInstalled } }
     func set(terminal: String) { lock.withLock { _terminal = terminal } }
     func set(listError: CcmError?) { lock.withLock { _listError = listError } }
+    func set(gatewayConnection: GatewayConnectionView, for name: String) {
+        lock.withLock { _gatewayConnectionResults[name.lowercased()] = gatewayConnection }
+    }
 
     /// Appends a profile as if `ccm add <name>` had just finished a login in
     /// Terminal — this is what the add-subscription poll is waiting for.
@@ -103,6 +109,18 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     }
     func updateGatewayModelMappings(name: String, modelMappings: GatewayModelMappings) throws {
         lock.withLock { updateGatewayMappingCalls.append((name, modelMappings)) }
+    }
+    func checkGatewayConnection(name: String) throws -> GatewayConnectionView {
+        try lock.withLock {
+            checkGatewayConnectionCalls.append(name)
+            if let gatewayConnectionError { throw gatewayConnectionError }
+            return _gatewayConnectionResults[name.lowercased()] ?? GatewayConnectionView(
+                state: "unreachable",
+                endpoint: "",
+                modelCount: 0,
+                message: "Could not reach the gateway. Check its URL and network access."
+            )
+        }
     }
     func removeProfile(name: String) throws {
         try lock.withLock {

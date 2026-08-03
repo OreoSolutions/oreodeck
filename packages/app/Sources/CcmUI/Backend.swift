@@ -18,6 +18,7 @@ public protocol CcmBackend: Sendable {
     func addApiKeyProfile(name: String, key: String) throws
     func addGatewayProfile(name: String, baseUrl: String, key: String, modelMappings: GatewayModelMappings) throws
     func updateGatewayModelMappings(name: String, modelMappings: GatewayModelMappings) throws
+    func checkGatewayConnection(name: String) throws -> GatewayConnectionView
     func removeProfile(name: String) throws
     func getFailover() throws -> FailoverView
     func setFailoverEnabled(on: Bool) throws
@@ -51,6 +52,9 @@ public struct LiveBackend: CcmBackend {
     }
     public func updateGatewayModelMappings(name: String, modelMappings: GatewayModelMappings) throws {
         try CcmKit.updateGatewayModelMappings(name: name, modelMappings: modelMappings)
+    }
+    public func checkGatewayConnection(name: String) throws -> GatewayConnectionView {
+        try CcmKit.checkGatewayConnection(name: name)
     }
     public func removeProfile(name: String) throws { try CcmKit.removeProfile(name: name) }
     public func getFailover() throws -> FailoverView { try CcmKit.getFailover() }

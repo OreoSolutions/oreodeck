@@ -38,6 +38,10 @@ public final class AppModel: ObservableObject {
     @Published public private(set) var terminal = "terminal"
     @Published public private(set) var availableUpdate: OreoUpdateRelease?
     @Published public private(set) var checkingForUpdate = false
+    /// Latest one-off gateway `/models` check by canonical profile name. It is
+    /// deliberately separate from profile loading: checking a gateway must not
+    /// rewrite configuration, launch Claude, or block the dashboard refresh.
+    @Published public private(set) var gatewayConnections: [String: GatewayConnectionView] = [:]
     /// Name of the subscription profile whose Terminal login we're polling for.
     @Published public private(set) var pendingSubscription: String?
     /// Refreshed on every load so countdowns re-render without their own clock.
@@ -216,6 +220,32 @@ public final class AppModel: ObservableObject {
     public func updateGatewayModelMappings(name: String, modelMappings: GatewayModelMappings) async {
         let backend = self.backend
         await perform { try backend.updateGatewayModelMappings(name: name, modelMappings: modelMappings) }
+    }
+
+    /// Probes only the selected gateway's model index. The backend keeps the
+    /// Keychain token inside the Rust core and returns display-safe state; an
+    /// unexpected backend failure is intentionally collapsed to the same safe
+    /// unreachable message rather than leaking transport or credential detail.
+    public func checkGatewayConnection(name: String) async {
+        gatewayConnections[name] = GatewayConnectionView(
+            state: "checking",
+            endpoint: gatewayConnections[name]?.endpoint ?? "",
+            modelCount: 0,
+            message: "Checking gateway connection…"
+        )
+        let backend = self.backend
+        do {
+            gatewayConnections[name] = try await Task.detached {
+                try backend.checkGatewayConnection(name: name)
+            }.value
+        } catch {
+            gatewayConnections[name] = GatewayConnectionView(
+                state: "unreachable",
+                endpoint: gatewayConnections[name]?.endpoint ?? "",
+                modelCount: 0,
+                message: "Could not reach the gateway. Check its URL and network access."
+            )
+        }
     }
 
     /// Opens `ccm add <name>` in Terminal (the OAuth /login flow only works in
