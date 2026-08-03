@@ -115,6 +115,24 @@ import Testing
 }
 
 @MainActor
+@Test func addGatewayProfileForwardsTheURLAndNeverRetainsTheToken() async {
+    let backend = FakeBackend()
+    let model = AppModel(backend: backend)
+
+    await model.addGatewayProfile(
+        name: "gateway",
+        baseUrl: "https://gateway.example.com/anthropic",
+        key: "gateway-secret")
+
+    #expect(backend.addGatewayCalls.count == 1)
+    #expect(backend.addGatewayCalls[0].name == "gateway")
+    #expect(backend.addGatewayCalls[0].baseUrl == "https://gateway.example.com/anthropic")
+    #expect(backend.addGatewayCalls[0].key == "gateway-secret")
+    #expect(model.actionError == nil)
+    #expect(!model.rows.contains { $0.name.contains("gateway-secret") })
+}
+
+@MainActor
 @Test func addSubscriptionOpensTerminalThenPollsUntilTheProfileAppears() async {
     // This is the flow the old webview app shipped DEAD. It gets an automated
     // test AND a manual smoke item — one is not a substitute for the other.

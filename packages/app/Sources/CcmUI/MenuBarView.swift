@@ -120,7 +120,7 @@ public struct MenuBarView: View {
                                 }
                                 Text(row.kind == "subscription"
                                     ? "\(row.planFiveHourPercent.map { "\(Int($0.rounded()))% used" } ?? "Usage unavailable") · resets \(formatCountdown(resetAtMs: row.planFiveHourResetAtMs, nowMs: model.nowMs))"
-                                    : "\(formatTokens(row.totalTokens)) local tokens · API billing")
+                                    : "\(formatTokens(row.totalTokens)) local tokens · \(row.kind == "gateway" ? "Gateway" : "API") billing")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }

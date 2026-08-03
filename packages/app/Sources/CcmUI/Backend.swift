@@ -16,6 +16,7 @@ public protocol CcmBackend: Sendable {
     func setSharedResources(name: String, resources: [String]) throws
     func setSharedResourcesForce(name: String, resources: [String]) throws
     func addApiKeyProfile(name: String, key: String) throws
+    func addGatewayProfile(name: String, baseUrl: String, key: String) throws
     func removeProfile(name: String) throws
     func getFailover() throws -> FailoverView
     func setFailoverEnabled(on: Bool) throws
@@ -43,6 +44,9 @@ public struct LiveBackend: CcmBackend {
     }
     public func addApiKeyProfile(name: String, key: String) throws {
         try CcmKit.addApiKeyProfile(name: name, key: key)
+    }
+    public func addGatewayProfile(name: String, baseUrl: String, key: String) throws {
+        try CcmKit.addGatewayProfile(name: name, baseUrl: baseUrl, key: key)
     }
     public func removeProfile(name: String) throws { try CcmKit.removeProfile(name: name) }
     public func getFailover() throws -> FailoverView { try CcmKit.getFailover() }

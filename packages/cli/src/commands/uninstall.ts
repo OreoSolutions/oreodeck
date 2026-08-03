@@ -72,7 +72,7 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
   if (opts.purge) {
     const config = await loadConfig();
     for (const profile of config.profiles) {
-      if (profile.kind === "api-key") await deleteApiKey(profile.name);
+      if (profile.kind === "api-key" || profile.kind === "gateway") await deleteApiKey(profile.name);
     }
     await rm(ccmHome(), { recursive: true, force: true });
   }

@@ -4,11 +4,12 @@ import { readJson, withDirectoryLock, writeJsonAtomic } from "./atomic";
 import { deleteApiKey } from "./keychain";
 import { ensureBuiltinOreoDeckSkill } from "./builtin-skills";
 
-export type ProfileKind = "subscription" | "api-key";
+export type ProfileKind = "subscription" | "api-key" | "gateway";
 
 export interface Profile {
   name: string;
   kind: ProfileKind;
+  gatewayBaseUrl?: string;
   sharedResources?: string[];
 }
 
@@ -33,6 +34,29 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** A gateway owns the API token OreoDeck will inject, so remote plaintext HTTP
+ * would disclose it. Local gateways are deliberately allowed for development. */
+export function normalizeGatewayBaseUrl(value: string): string {
+  const input = value.trim();
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    throw new Error("Gateway URL must be an absolute HTTPS URL or a loopback HTTP URL.");
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new Error("Gateway URL cannot contain credentials, a query, or a fragment.");
+  }
+  const host = url.hostname.toLowerCase();
+  const loopback = host === "localhost" || host.endsWith(".localhost") ||
+    host === "127.0.0.1" || host === "[::1]" || host === "::1";
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+    throw new Error("Gateway URL must use HTTPS unless it points to localhost.");
+  }
+  url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+  return url.toString();
+}
+
 /** Runtime half of the TS/Rust disk contract. Type assertions alone do not
  * protect the CLI from valid JSON with the wrong shape. Unknown fields remain
  * on the original object and therefore survive writes for forward compatibility. */
@@ -46,7 +70,15 @@ export function validateConfig(value: unknown): Config {
   }
   for (const profile of value.profiles) {
     if (!isRecord(profile) || typeof profile.name !== "string" ||
-        (profile.kind !== "subscription" && profile.kind !== "api-key")) {
+        (profile.kind !== "subscription" && profile.kind !== "api-key" && profile.kind !== "gateway")) {
+      throw new Error("The OreoDeck config file has an invalid structure and could not be read.");
+    }
+    if (profile.kind === "gateway") {
+      if (typeof profile.gatewayBaseUrl !== "string" ||
+          normalizeGatewayBaseUrl(profile.gatewayBaseUrl) !== profile.gatewayBaseUrl) {
+        throw new Error("The OreoDeck config file has an invalid gateway URL and could not be read.");
+      }
+    } else if (profile.gatewayBaseUrl !== undefined) {
       throw new Error("The OreoDeck config file has an invalid structure and could not be read.");
     }
     if (profile.sharedResources !== undefined &&
@@ -107,16 +139,24 @@ export async function getProfile(name: string): Promise<Profile | null> {
   return findProfile(c.profiles, name) ?? null;
 }
 
-export async function addProfile(name: string, kind: ProfileKind): Promise<void> {
+async function addProfileRecord(name: string, kind: ProfileKind, gatewayBaseUrl?: string): Promise<void> {
   assertValidName(name);
   await updateConfig(async (c) => {
     if (findProfile(c.profiles, name)) throw new Error(`Profile "${name}" already exists.`);
     await mkdir(profileDir(name), { recursive: true });
     await ensureBuiltinOreoDeckSkill(name);
-    c.profiles.push({ name, kind });
+    c.profiles.push({ name, kind, ...(gatewayBaseUrl ? { gatewayBaseUrl } : {}) });
     c.failoverOrder.push(name);
     c.active ??= name;
   });
+}
+
+export async function addProfile(name: string, kind: Exclude<ProfileKind, "gateway">): Promise<void> {
+  await addProfileRecord(name, kind);
+}
+
+export async function addGatewayProfile(name: string, baseUrl: string): Promise<void> {
+  await addProfileRecord(name, "gateway", normalizeGatewayBaseUrl(baseUrl));
 }
 
 export async function removeProfile(name: string): Promise<void> {

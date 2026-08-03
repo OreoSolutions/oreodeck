@@ -138,7 +138,7 @@ public struct UsageTab: View {
                                         .clipShape(Capsule())
                                 }
                                 Spacer()
-                                if row.kind == "api-key" {
+                                if row.kind == "api-key" || row.kind == "gateway" {
                                     Text("\(formatTokens(row.totalTokens)) local tokens")
                                         .monospacedDigit()
                                     Text(formatCost(kind: row.kind, costUsd: row.costUsd))

@@ -64,7 +64,9 @@ async function runCapturing(
 ): Promise<{ code: number; output: string }> {
   const profile = await getProfile(profileName);
   if (!profile) throw new Error(`Profile "${profileName}" not found.`);
-  const apiKey = profile.kind === "api-key" ? await getApiKey(profileName) : null;
+  const apiKey = profile.kind === "api-key" || profile.kind === "gateway"
+    ? await getApiKey(profileName)
+    : null;
   const env = await buildEnv(profile, apiKey, process.env);
   const bin = process.env.OREODECK_CLAUDE_BIN ?? process.env.CCM_CLAUDE_BIN ?? "claude";
 

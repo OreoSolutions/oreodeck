@@ -8,6 +8,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use url::{Host, Url};
 
 /// Tên profile thành tên thư mục ⇒ phải chặn path traversal. Regex y hệt
 /// `NAME_RE` trong packages/core (paths.ts).
@@ -19,12 +20,15 @@ static NAME_RE: LazyLock<Regex> =
 pub enum ProfileKind {
     Subscription,
     ApiKey,
+    Gateway,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Profile {
     pub name: String,
     pub kind: ProfileKind,
+    #[serde(rename = "gatewayBaseUrl", skip_serializing_if = "Option::is_none")]
+    pub gateway_base_url: Option<String>,
     /// Trường lạ (chưa biết ở phiên bản Rust này) — giữ nguyên qua round-trip
     /// thay vì bị xóa khi app ghi lại config.json, khớp tính lossless của TS
     /// (`readJson` → mutate → `JSON.stringify`, không đi qua struct cố định
@@ -69,6 +73,7 @@ pub enum StoreError {
     Io(String),
     SharedResource(String),
     InvalidTerminal(String),
+    InvalidGatewayBaseUrl(String),
 }
 
 impl StoreError {
@@ -94,6 +99,9 @@ impl StoreError {
             StoreError::InvalidTerminal(value) => format!(
                 "Unsupported terminal \"{value}\". Choose a terminal from OreoDeck Settings."
             ),
+            StoreError::InvalidGatewayBaseUrl(_) => {
+                "Gateway URL must be an absolute HTTPS URL or a loopback HTTP URL, without credentials, a query, or a fragment.".to_string()
+            }
         }
     }
 }
@@ -480,9 +488,57 @@ pub fn profile_dir(name: &str) -> Result<PathBuf, StoreError> {
     Ok(profiles_dir().join(name))
 }
 
+pub fn normalize_gateway_base_url(value: &str) -> Result<String, StoreError> {
+    let mut url = Url::parse(value.trim())
+        .map_err(|_| StoreError::InvalidGatewayBaseUrl(value.to_string()))?;
+    if url.cannot_be_a_base()
+        || url.host().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(StoreError::InvalidGatewayBaseUrl(value.to_string()));
+    }
+    let loopback = matches!(url.host(),
+        Some(Host::Domain(host)) if host == "localhost" || host.ends_with(".localhost")
+    ) || matches!(url.host(), Some(Host::Ipv4(address)) if address.octets() == [127, 0, 0, 1])
+        || matches!(url.host(), Some(Host::Ipv6(address)) if address.is_loopback());
+    if url.scheme() != "https" && !(url.scheme() == "http" && loopback) {
+        return Err(StoreError::InvalidGatewayBaseUrl(value.to_string()));
+    }
+    let path = url.path().trim_end_matches('/').to_string();
+    url.set_path(if path.is_empty() { "/" } else { &path });
+    Ok(url.to_string())
+}
+
+fn validate_config(config: Config) -> Result<Config, StoreError> {
+    for profile in &config.profiles {
+        match profile.kind {
+            ProfileKind::Gateway => {
+                let Some(base_url) = &profile.gateway_base_url else {
+                    return Err(StoreError::CorruptConfig);
+                };
+                if normalize_gateway_base_url(base_url).ok().as_deref() != Some(base_url) {
+                    return Err(StoreError::CorruptConfig);
+                }
+            }
+            ProfileKind::Subscription | ProfileKind::ApiKey
+                if profile.gateway_base_url.is_some() =>
+            {
+                return Err(StoreError::CorruptConfig);
+            }
+            _ => {}
+        }
+    }
+    Ok(config)
+}
+
 pub fn load_config() -> Result<Config, StoreError> {
     match fs::read_to_string(config_path()) {
-        Ok(s) => serde_json::from_str(&s).map_err(|_| StoreError::CorruptConfig),
+        Ok(s) => serde_json::from_str(&s)
+            .map_err(|_| StoreError::CorruptConfig)
+            .and_then(validate_config),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
         Err(e) => Err(StoreError::Io(e.to_string())),
     }
@@ -594,7 +650,11 @@ pub fn get_profile(name: &str) -> Result<Option<Profile>, StoreError> {
     Ok(find_profile(&load_config()?.profiles, name).cloned())
 }
 
-pub fn add_profile(name: &str, kind: ProfileKind) -> Result<(), StoreError> {
+fn add_profile_record(
+    name: &str,
+    kind: ProfileKind,
+    gateway_base_url: Option<String>,
+) -> Result<(), StoreError> {
     assert_valid_name(name)?;
     update_config(|c| {
         if find_profile(&c.profiles, name).is_some() {
@@ -604,6 +664,7 @@ pub fn add_profile(name: &str, kind: ProfileKind) -> Result<(), StoreError> {
         c.profiles.push(Profile {
             name: name.to_string(),
             kind,
+            gateway_base_url,
             extra: serde_json::Map::new(),
         });
         c.failover_order.push(name.to_string());
@@ -612,6 +673,21 @@ pub fn add_profile(name: &str, kind: ProfileKind) -> Result<(), StoreError> {
         }
         Ok(())
     })
+}
+
+pub fn add_profile(name: &str, kind: ProfileKind) -> Result<(), StoreError> {
+    if matches!(kind, ProfileKind::Gateway) {
+        return Err(StoreError::InvalidGatewayBaseUrl(String::new()));
+    }
+    add_profile_record(name, kind, None)
+}
+
+pub fn add_gateway_profile(name: &str, base_url: &str) -> Result<(), StoreError> {
+    add_profile_record(
+        name,
+        ProfileKind::Gateway,
+        Some(normalize_gateway_base_url(base_url)?),
+    )
 }
 
 /// Xóa profile: hủy tài nguyên TRƯỚC (thư mục), commit config SAU. Keychain do
@@ -796,6 +872,54 @@ mod tests {
             !err.message().contains("CONFIG_CORRUPT"),
             "the machine-readable sentinel must never reach user-facing copy"
         );
+    }
+
+    #[test]
+    #[serial]
+    fn load_config_accepts_anthropic_compatible_gateway_profile() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        std::fs::write(
+            config_path(),
+            br#"{"profiles":[{"name":"gateway","kind":"gateway","gatewayBaseUrl":"https://gateway.example.com/anthropic"}],"active":"gateway","failoverEnabled":true,"failoverOrder":["gateway"]}"#,
+        )
+        .unwrap();
+
+        let config = load_config();
+        env::remove_var("CCM_HOME");
+        assert!(config.is_ok());
+    }
+
+    #[test]
+    #[serial]
+    fn add_gateway_profile_normalizes_its_url() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        add_gateway_profile("gateway", " https://gateway.example.com/anthropic/// ").unwrap();
+        let config = load_config().unwrap();
+        env::remove_var("CCM_HOME");
+        assert_eq!(config.profiles.len(), 1);
+        assert_eq!(config.profiles[0].kind, ProfileKind::Gateway);
+        assert_eq!(
+            config.profiles[0].gateway_base_url.as_deref(),
+            Some("https://gateway.example.com/anthropic")
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn add_gateway_profile_rejects_insecure_or_secret_bearing_urls() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        assert!(matches!(
+            add_gateway_profile("remote", "http://gateway.example.com"),
+            Err(StoreError::InvalidGatewayBaseUrl(_))
+        ));
+        assert!(matches!(
+            add_gateway_profile("credentialed", "https://token@gateway.example.com"),
+            Err(StoreError::InvalidGatewayBaseUrl(_))
+        ));
+        env::remove_var("CCM_HOME");
     }
 
     #[test]
@@ -1018,14 +1142,20 @@ mod tests {
         std::fs::copy(contract_fixtures_dir().join("config.json"), config_path()).unwrap();
 
         let c = load_config().unwrap();
-        assert_eq!(c.profiles.len(), 2);
+        assert_eq!(c.profiles.len(), 3);
         assert_eq!(c.profiles[0].name, "Work"); // canonical casing preserved
         assert_eq!(c.profiles[0].kind, ProfileKind::Subscription);
         assert_eq!(c.profiles[1].name, "bot");
         assert_eq!(c.profiles[1].kind, ProfileKind::ApiKey);
+        assert_eq!(c.profiles[2].name, "gateway");
+        assert_eq!(c.profiles[2].kind, ProfileKind::Gateway);
+        assert_eq!(
+            c.profiles[2].gateway_base_url.as_deref(),
+            Some("https://gateway.example.com/anthropic")
+        );
         assert_eq!(c.active.as_deref(), Some("Work"));
         assert!(c.failover_enabled);
-        assert_eq!(c.failover_order, vec!["Work", "bot"]);
+        assert_eq!(c.failover_order, vec!["Work", "bot", "gateway"]);
         assert_eq!(
             c.extra.get("telemetryOptIn"),
             Some(&serde_json::json!(false))

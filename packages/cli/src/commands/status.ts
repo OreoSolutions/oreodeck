@@ -188,7 +188,7 @@ export async function statusCommand(): Promise<void> {
     for (const line of renderPlanUsageTable(planRows)) console.log(line);
   }
 
-  const apiProfiles = c.profiles.filter((profile) => profile.kind === "api-key");
+  const apiProfiles = c.profiles.filter((profile) => profile.kind === "api-key" || profile.kind === "gateway");
   if (apiProfiles.length > 0) {
     const rows: Row[] = await Promise.all(apiProfiles.map(async (p) => {
       const usage = await readProfileUsage(p.name);

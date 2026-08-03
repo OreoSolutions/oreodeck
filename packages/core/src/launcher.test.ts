@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { buildEnv } from "./launcher";
+import type { Profile } from "./profile-store";
 import { profileDir } from "./paths";
 
 let dir: string;
@@ -25,6 +26,26 @@ test("buildEnv points CLAUDE_CONFIG_DIR at the profile dir", async () => {
 test("buildEnv injects ANTHROPIC_API_KEY for api-key profiles", async () => {
   const env = await buildEnv({ name: "bot", kind: "api-key" }, "sk-ant-x", {});
   expect(env.ANTHROPIC_API_KEY).toBe("sk-ant-x");
+});
+
+test("buildEnv injects only the selected gateway credentials", async () => {
+  const env = await buildEnv(
+    {
+      name: "gateway",
+      kind: "gateway",
+      gatewayBaseUrl: "https://gateway.example.com/anthropic",
+    } as Profile,
+    "gateway-secret",
+    {
+      ANTHROPIC_API_KEY: "inherited-api-key",
+      ANTHROPIC_AUTH_TOKEN: "inherited-auth-token",
+      ANTHROPIC_BASE_URL: "https://inherited.example.com",
+    },
+  );
+
+  expect(env.ANTHROPIC_API_KEY).toBeUndefined();
+  expect(env.ANTHROPIC_AUTH_TOKEN).toBe("gateway-secret");
+  expect(env.ANTHROPIC_BASE_URL).toBe("https://gateway.example.com/anthropic");
 });
 
 test("buildEnv strips an inherited ANTHROPIC_API_KEY for subscription profiles", async () => {

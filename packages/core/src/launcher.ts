@@ -24,12 +24,20 @@ export async function buildEnv(
   await ensureUsageStatuslineProxy(profile.name);
   const env: NodeJS.ProcessEnv = { ...base };
   env.CLAUDE_CONFIG_DIR = profileDir(profile.name);
+  // The selected OreoDeck profile, rather than a parent shell, owns every
+  // Claude API routing credential. This prevents a stale gateway or token
+  // from silently changing where a subscription/API-key profile sends code.
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  delete env.ANTHROPIC_BASE_URL;
   if (profile.kind === "api-key") {
     if (!apiKey) throw new Error(`No API key stored for profile "${profile.name}".`);
     env.ANTHROPIC_API_KEY = apiKey;
-  } else {
-    // Một ANTHROPIC_API_KEY thừa kế từ shell sẽ lấn át OAuth login của profile.
-    delete env.ANTHROPIC_API_KEY;
+  } else if (profile.kind === "gateway") {
+    if (!apiKey) throw new Error(`No API key stored for gateway profile "${profile.name}".`);
+    if (!profile.gatewayBaseUrl) throw new Error(`Gateway profile "${profile.name}" has no base URL.`);
+    env.ANTHROPIC_BASE_URL = profile.gatewayBaseUrl;
+    env.ANTHROPIC_AUTH_TOKEN = apiKey;
   }
   return env;
 }
@@ -41,7 +49,9 @@ export async function launchClaude(
 ): Promise<LaunchResult> {
   const profile = await getProfile(profileName);
   if (!profile) throw new Error(`Profile "${profileName}" not found.`);
-  const apiKey = profile.kind === "api-key" ? await getApiKey(profile.name) : null;
+  const apiKey = profile.kind === "api-key" || profile.kind === "gateway"
+    ? await getApiKey(profile.name)
+    : null;
   const env = await buildEnv(profile, apiKey, process.env);
   const bin = process.env.OREODECK_CLAUDE_BIN ?? process.env.CCM_CLAUDE_BIN ?? "claude";
 

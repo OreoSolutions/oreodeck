@@ -67,6 +67,7 @@ program
   .description("Add a profile (subscription by default)")
   .argument("<name>", "profile name")
   .option("--api-key", "create an API key profile instead of a subscription login")
+  .option("--gateway <url>", "create an Anthropic-compatible gateway profile")
   .action(addCommand);
 
 program

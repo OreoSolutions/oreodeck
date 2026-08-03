@@ -1,10 +1,11 @@
 {
   "profiles": [
     { "name": "Work", "kind": "subscription" },
-    { "name": "bot", "kind": "api-key" }
+    { "name": "bot", "kind": "api-key" },
+    { "name": "gateway", "kind": "gateway", "gatewayBaseUrl": "https://gateway.example.com/anthropic" }
   ],
   "active": "Work",
   "failoverEnabled": true,
-  "failoverOrder": ["Work", "bot"],
+  "failoverOrder": ["Work", "bot", "gateway"],
   "telemetryOptIn": false
 }

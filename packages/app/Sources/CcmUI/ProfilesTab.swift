@@ -7,6 +7,7 @@ public struct ProfilesTab: View {
     @State private var selection: ProfileRow.ID?
     @State private var showAddSubscription = false
     @State private var showAddApiKey = false
+    @State private var showAddGateway = false
     @State private var rowPendingRemoval: ProfileRow?
     @State private var rowSharingResources: ProfileRow?
 
@@ -64,7 +65,7 @@ public struct ProfilesTab: View {
             } else if model.rows.isEmpty {
                 OreoEmptyState(
                     title: "No profiles yet",
-                    message: "Add a subscription profile to log in with your Claude account, or add an API key profile.",
+                    message: "Add a subscription, API key, or Anthropic-compatible gateway profile.",
                     systemImage: "person.2",
                 )
             } else {
@@ -78,7 +79,7 @@ public struct ProfilesTab: View {
                         }
                     }
                     TableColumn("Kind") { row in
-                        Text(row.kind == "api-key" ? "API key" : "Subscription")
+                        Text(row.kind == "api-key" ? "API key" : row.kind == "gateway" ? "Gateway" : "Subscription")
                     }
                     TableColumn("Usage") { row in
                         Text(row.kind == "subscription"
@@ -150,6 +151,11 @@ public struct ProfilesTab: View {
                     } label: {
                         Label("API key profile", systemImage: "key.fill")
                     }
+                    Button {
+                        showAddGateway = true
+                    } label: {
+                        Label("Gateway profile", systemImage: "point.3.connected.trianglepath.dotted")
+                    }
                 } label: {
                     Label("Add profile", systemImage: "plus")
                 }
@@ -197,6 +203,9 @@ public struct ProfilesTab: View {
         .sheet(isPresented: $showAddApiKey) {
             AddApiKeySheet(model: model)
         }
+        .sheet(isPresented: $showAddGateway) {
+            AddGatewaySheet(model: model)
+        }
         .sheet(item: $rowPendingRemoval) { row in
             RemoveProfileSheet(model: model, row: row)
         }
@@ -209,6 +218,7 @@ public struct ProfilesTab: View {
         var commands = [
             CLICommandSuggestion("ord list", "List profiles and show the global active profile."),
             CLICommandSuggestion("ord add <name>", "Add a subscription profile and complete login in Terminal."),
+            CLICommandSuggestion("ord add <name> --gateway <url>", "Add an Anthropic-compatible gateway profile."),
         ]
         if let row = selectedRow {
             commands.append(CLICommandSuggestion("ord run -P \(row.name)", "Launch Claude with this profile explicitly."))
@@ -244,6 +254,83 @@ public struct ProfilesTab: View {
         .overlay {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(Color.primary.opacity(0.06))
+        }
+    }
+}
+
+struct AddGatewaySheet: View {
+    @ObservedObject var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var baseUrl = ""
+    @State private var key = ""
+    @State private var isSubmitting = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            OreoModalHeader(
+                title: "Add gateway profile",
+                subtitle: "Connect Claude Code through an Anthropic-compatible HTTPS gateway.",
+                systemImage: "point.3.connected.trianglepath.dotted",
+                tone: .purple
+            )
+            OreoModalSection {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Profile name").font(.caption.weight(.semibold))
+                        TextField("e.g. team-gateway", text: $name)
+                            .textFieldStyle(.roundedBorder)
+                            .controlSize(.large)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Gateway URL").font(.caption.weight(.semibold))
+                        TextField("https://gateway.example.com/anthropic", text: $baseUrl)
+                            .textFieldStyle(.roundedBorder)
+                            .controlSize(.large)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Gateway API key").font(.caption.weight(.semibold))
+                        SecureField("Token", text: $key)
+                            .textFieldStyle(.roundedBorder)
+                            .controlSize(.large)
+                    }
+                    Label("The URL is saved with this profile. The token stays only in macOS Keychain.", systemImage: "lock.shield.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if let actionError = model.actionError {
+                ActionErrorBanner(message: actionError) { model.dismissActionError() }
+            }
+            Divider()
+            HStack {
+                Spacer()
+                Button("Cancel") { key = ""; dismiss() }
+                    .buttonStyle(.bordered)
+                    .keyboardShortcut(.cancelAction)
+                Button(isSubmitting ? "Adding…" : "Add") { submit() }
+                    .buttonStyle(OreoPrimaryButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(isSubmitting || name.trimmingCharacters(in: .whitespaces).isEmpty || baseUrl.trimmingCharacters(in: .whitespaces).isEmpty || key.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .controlSize(.large)
+        }
+        .onAppear { model.dismissActionError() }
+        .padding(22)
+        .frame(width: 500)
+        .background(OreoTheme.canvas)
+    }
+
+    private func submit() {
+        let profileName = name.trimmingCharacters(in: .whitespaces)
+        let profileBaseUrl = baseUrl.trimmingCharacters(in: .whitespaces)
+        let profileKey = key
+        key = ""
+        isSubmitting = true
+        Task {
+            await model.addGatewayProfile(name: profileName, baseUrl: profileBaseUrl, key: profileKey)
+            isSubmitting = false
+            if model.actionError == nil { dismiss() }
         }
     }
 }

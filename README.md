@@ -28,8 +28,9 @@ same functionality.
 
 - Isolated Claude Code profiles powered by a separate `CLAUDE_CONFIG_DIR` for
   every account.
-- Subscription/OAuth and API-key profiles, with API keys stored in macOS
-  Keychain rather than configuration files.
+- Subscription/OAuth, direct API-key, and Anthropic-compatible gateway
+  profiles, with API keys stored in macOS Keychain rather than configuration
+  files.
 - Global, per-tab, and one-command profile selection.
 - Interactive session picker for importing and resuming conversations from
   global Claude or another profile.
@@ -100,6 +101,14 @@ Create an API-key profile:
 
 ```bash
 oreodeck add automation --api-key
+```
+
+Create an Anthropic-compatible gateway profile (for example, a LiteLLM
+gateway). Remote gateways must use HTTPS; loopback development URLs may use
+HTTP. The gateway token stays in Keychain:
+
+```bash
+oreodeck add team-gateway --gateway https://gateway.example.com/anthropic
 ```
 
 List profiles, choose the global default, and launch Claude:

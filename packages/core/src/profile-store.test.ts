@@ -3,7 +3,7 @@ import { mkdtemp, rm, stat, writeFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import {
-  loadConfig, saveConfig, addProfile, removeProfile, setActive,
+  loadConfig, saveConfig, addProfile, addGatewayProfile, removeProfile, setActive,
   getProfile, resolveProfileName,
 } from "./profile-store";
 import { profileDir } from "./paths";
@@ -33,6 +33,42 @@ test("loadConfig rejects valid JSON with an invalid runtime shape", async () => 
     profiles: null, active: null, failoverEnabled: true, failoverOrder: [],
   }));
   await expect(loadConfig()).rejects.toThrow("invalid structure");
+});
+
+test("loadConfig accepts an Anthropic-compatible gateway profile", async () => {
+  await writeFile(join(dir, "config.json"), JSON.stringify({
+    profiles: [{
+      name: "gateway",
+      kind: "gateway",
+      gatewayBaseUrl: "https://gateway.example.com/anthropic",
+    }],
+    active: "gateway",
+    failoverEnabled: true,
+    failoverOrder: ["gateway"],
+  }));
+
+  await expect(loadConfig()).resolves.toMatchObject({
+    profiles: [{
+      name: "gateway",
+      kind: "gateway",
+      gatewayBaseUrl: "https://gateway.example.com/anthropic",
+    }],
+  });
+});
+
+test("addGatewayProfile normalizes a URL and persists no token", async () => {
+  await addGatewayProfile("gateway", " https://gateway.example.com/anthropic/// ");
+  expect((await loadConfig()).profiles).toEqual([{
+    name: "gateway",
+    kind: "gateway",
+    gatewayBaseUrl: "https://gateway.example.com/anthropic",
+  }]);
+});
+
+test("addGatewayProfile rejects insecure remote URLs and secret-bearing URLs", async () => {
+  await expect(addGatewayProfile("remote", "http://gateway.example.com")).rejects.toThrow("HTTPS");
+  await expect(addGatewayProfile("credentialed", "https://token@gateway.example.com")).rejects.toThrow("credentials");
+  await expect(addGatewayProfile("query", "https://gateway.example.com/?token=secret")).rejects.toThrow("query");
 });
 
 test("addProfile persists the profile and creates its config dir", async () => {

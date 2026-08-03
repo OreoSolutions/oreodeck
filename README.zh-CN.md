@@ -16,7 +16,7 @@ OreoDeck 支持并行使用多个 Claude 账户、为不同终端标签页固定
 ## 主要功能
 
 - 每个账户使用独立的 `CLAUDE_CONFIG_DIR`。
-- 支持订阅/OAuth 和 API 密钥配置档案；API 密钥存储在 macOS Keychain 中。
+- 支持订阅/OAuth、直连 API 密钥和兼容 Anthropic 的网关配置档案；API 密钥存储在 macOS Keychain 中。
 - 支持全局、每个标签页和单次命令的配置档案选择。
 - 从全局 Claude 或其他配置档案导入并继续会话。
 - 选择性共享 MCP、skills、plugins 和状态栏，不共享凭据或完整设置文件。
@@ -65,10 +65,14 @@ ord ui open
 ```bash
 oreodeck add work
 oreodeck add automation --api-key
+oreodeck add team-gateway --gateway https://gateway.example.com/anthropic
 ord list
 ord use work
 ord run
 ```
+
+网关必须兼容 Anthropic API。远程网关必须使用 HTTPS；HTTP 仅允许用于本地
+loopback 开发网关。网关 token 仅保存在 Keychain 中。
 
 为单次调用覆盖配置档案：
 

@@ -84,6 +84,7 @@ export function parseClaudeVersion(output: string): string | null {
 
 function loginMethod(kind: ProfileKind, organizationType: string | null): string {
   if (kind === "api-key") return "API key";
+  if (kind === "gateway") return "Gateway API key";
   if (organizationType === "claude_max") return "Claude Max account";
   return "Claude subscription";
 }

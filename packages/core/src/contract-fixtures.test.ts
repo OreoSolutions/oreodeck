@@ -47,10 +47,11 @@ test("config.json fixture round-trips with canonical casing and known fields pre
   expect(c.profiles).toEqual([
     { name: "Work", kind: "subscription" },
     { name: "bot", kind: "api-key" },
+    { name: "gateway", kind: "gateway", gatewayBaseUrl: "https://gateway.example.com/anthropic" },
   ]);
   expect(c.active).toBe("Work"); // canonical casing preserved, not lowercased
   expect(c.failoverEnabled).toBe(true);
-  expect(c.failoverOrder).toEqual(["Work", "bot"]);
+  expect(c.failoverOrder).toEqual(["Work", "bot", "gateway"]);
   // Unknown field must round-trip: TS is lossless by construction
   // (readJson -> JSON.parse -> mutate -> JSON.stringify never drops fields
   // it doesn't declare in the Config interface). This is the counterpart to

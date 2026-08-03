@@ -16,7 +16,7 @@ OreoDeck cho phép chạy nhiều tài khoản Claude song song, gắn profile t
 ## Điểm nổi bật
 
 - Mỗi tài khoản dùng một `CLAUDE_CONFIG_DIR` riêng.
-- Hỗ trợ profile subscription/OAuth và API key; API key được lưu trong macOS Keychain.
+- Hỗ trợ profile subscription/OAuth, API key trực tiếp và gateway tương thích Anthropic; API key được lưu trong macOS Keychain.
 - Chọn profile global, theo tab hoặc cho một lần chạy.
 - Picker để nhập và tiếp tục session từ Claude global hoặc profile khác.
 - Chia sẻ có chọn lọc MCP, skills, plugins và status line mà không chia sẻ credential hay toàn bộ settings.
@@ -65,10 +65,15 @@ ord ui open
 ```bash
 oreodeck add work
 oreodeck add automation --api-key
+oreodeck add team-gateway --gateway https://gateway.example.com/anthropic
 ord list
 ord use work
 ord run
 ```
+
+Gateway phải tương thích API Anthropic. Gateway từ xa bắt buộc dùng HTTPS;
+HTTP chỉ được dùng cho gateway loopback khi phát triển. Token gateway chỉ nằm
+trong Keychain.
 
 Chạy một lần bằng profile khác:
 

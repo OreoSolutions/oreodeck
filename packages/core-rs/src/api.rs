@@ -34,6 +34,7 @@ impl From<store::StoreError> for CcmError {
             store::StoreError::Io(_) => CcmError::Io { message },
             store::StoreError::SharedResource(_) => CcmError::Io { message },
             store::StoreError::InvalidTerminal(_) => CcmError::Io { message },
+            store::StoreError::InvalidGatewayBaseUrl(_) => CcmError::Io { message },
         }
     }
 }
@@ -59,7 +60,7 @@ impl From<terminal::TermError> for CcmError {
 #[derive(Debug, uniffi::Record)]
 pub struct ProfileView {
     pub name: String,
-    /// "subscription" | "api-key" — same wire values as config.json's `kind`.
+    /// "subscription" | "api-key" | "gateway" — same wire values as config.json's `kind`.
     pub kind: String,
     pub active: bool,
     pub shared_resources: Vec<String>,
@@ -96,6 +97,7 @@ fn kind_str(k: store::ProfileKind) -> String {
     match k {
         store::ProfileKind::Subscription => "subscription",
         store::ProfileKind::ApiKey => "api-key",
+        store::ProfileKind::Gateway => "gateway",
     }
     .to_string()
 }
@@ -216,6 +218,31 @@ where
 #[uniffi::export]
 pub fn add_api_key_profile(name: String, key: String) -> Result<(), CcmError> {
     add_api_key_profile_with(&name, &key, |n, k| Ok(keychain::set_api_key(n, k)?))
+}
+
+fn add_gateway_profile_with<S>(
+    name: &str,
+    base_url: &str,
+    key: &str,
+    set_key: S,
+) -> Result<(), CcmError>
+where
+    S: FnOnce(&str, &str) -> Result<(), CcmError>,
+{
+    store::add_gateway_profile(name, base_url)?;
+    if let Err(error) = set_key(name, key) {
+        let _ = store::remove_profile(name);
+        return Err(error);
+    }
+    Ok(())
+}
+
+/// `key` is passed directly to Keychain and never persisted in config.json.
+#[uniffi::export]
+pub fn add_gateway_profile(name: String, base_url: String, key: String) -> Result<(), CcmError> {
+    add_gateway_profile_with(&name, &base_url, &key, |n, k| {
+        Ok(keychain::set_api_key(n, k)?)
+    })
 }
 
 /// Testable core of `remove_profile`. Resolves the CANONICAL stored name

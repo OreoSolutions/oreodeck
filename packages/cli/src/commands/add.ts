@@ -1,12 +1,33 @@
 import { spawn } from "node:child_process";
-import { addProfile, setApiKey, removeProfile, buildEnv } from "@ccm/core";
+import { addProfile, addGatewayProfile, setApiKey, removeProfile, buildEnv } from "@ccm/core";
 import { promptHidden } from "../prompt";
 
 interface AddOptions {
   apiKey?: boolean;
+  gateway?: string;
 }
 
 export async function addCommand(name: string, opts: AddOptions): Promise<void> {
+  if (opts.apiKey && opts.gateway) {
+    throw new Error("Choose either --api-key or --gateway <url>, not both.");
+  }
+  if (opts.gateway) {
+    const key = await promptHidden("Gateway API key: ");
+    if (!key) throw new Error("No API key entered. Aborted.");
+    await addGatewayProfile(name, opts.gateway);
+    try {
+      await setApiKey(name, key);
+    } catch (err) {
+      try {
+        await removeProfile(name);
+      } catch {
+        // Preserve the original, key-sanitized Keychain error.
+      }
+      throw err;
+    }
+    console.log(`Added gateway profile "${name}".`);
+    return;
+  }
   if (opts.apiKey) {
     const key = await promptHidden("Anthropic API key: ");
     if (!key) throw new Error("No API key entered. Aborted.");

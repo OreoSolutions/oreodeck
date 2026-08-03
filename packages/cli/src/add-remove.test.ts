@@ -29,12 +29,13 @@ beforeEach(async () => {
 afterEach(async () => {
   delete process.env.CCM_HOME;
   await rm(dir, { recursive: true, force: true });
-  // `--api-key` tests write to the REAL macOS Keychain (it's global, not
+  // `--api-key` and `--gateway` tests write to the REAL macOS Keychain (it's global, not
   // scoped by CCM_HOME like the rest of a profile's data). removeProfile()
   // isn't called in every test path, so clean up directly here — otherwise
   // every test run leaves a stray "com.oreo.ccm"/"bot" entry behind.
   // deleteApiKey() is a no-op if the entry doesn't exist.
   await deleteApiKey("bot");
+  await deleteApiKey("gateway");
 });
 
 test("add creates a subscription profile", async () => {
@@ -56,6 +57,30 @@ test("add --api-key never writes the key into config.json", async () => {
   await ccm(["add", "bot", "--api-key"], "sk-ant-secret-xyz\n");
   const raw = await Bun.file(join(dir, "config.json")).text();
   expect(raw).not.toContain("sk-ant-secret-xyz");
+});
+
+test("add --gateway stores a compatible URL but never its API key", async () => {
+  const { code } = await ccm(
+    ["add", "gateway", "--gateway", "https://gateway.example.com/anthropic"],
+    "gateway-secret-xyz\n",
+  );
+  expect(code).toBe(0);
+  const c = await loadConfig();
+  expect(c.profiles).toEqual([{
+    name: "gateway",
+    kind: "gateway",
+    gatewayBaseUrl: "https://gateway.example.com/anthropic",
+  }]);
+  const raw = await Bun.file(join(dir, "config.json")).text();
+  expect(raw).not.toContain("gateway-secret-xyz");
+});
+
+test("add rejects --api-key combined with --gateway before asking for a token", async () => {
+  const { stderr, code } = await ccm([
+    "add", "gateway", "--api-key", "--gateway", "https://gateway.example.com",
+  ]);
+  expect(code).toBe(1);
+  expect(stderr).toContain("Choose either --api-key or --gateway");
 });
 
 test("add rejects a duplicate name", async () => {
