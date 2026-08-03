@@ -1,4 +1,5 @@
 import CcmKit
+import SwiftUI
 import Testing
 import ViewInspector
 
@@ -21,6 +22,56 @@ import ViewInspector
     #expect(try tab.inspect().find(text: "Gateway connection").string() == "Gateway connection")
     #expect(try tab.inspect().find(text: "Check connection").string() == "Check connection")
     #expect(try tab.inspect().find(text: "cx/gpt-5.6-sol").string() == "cx/gpt-5.6-sol")
+}
+
+@MainActor
+@Test func addGatewaySheetRequiresAnExplicitEndpointCheckBeforeShowingModelMappings() throws {
+    let sheet = AddGatewaySheet(model: AppModel(backend: FakeBackend()))
+
+    #expect(try sheet.inspect().find(button: "Check endpoint").isDisabled() == true)
+    #expect(throws: (any Error).self) {
+        try sheet.inspect().find(text: "Model mapping")
+    }
+}
+
+@MainActor
+@Test func addGatewaySheetShowsProviderModelRowsOnlyAfterModelsAreDiscovered() throws {
+    let sheet = AddGatewaySheet(
+        model: AppModel(backend: FakeBackend()),
+        initialModelIndex: GatewayModelIndexView(
+            state: "connected",
+            endpoint: "https://gateway.example.com/v1/models",
+            modelIds: ["cc/claude-opus-5", "cc/claude-sonnet-5"],
+            message: "Connected — 2 models available."
+        )
+    )
+
+    #expect(try sheet.inspect().find(text: "Model mapping").string() == "Model mapping")
+    #expect(try sheet.inspect().find(text: "Claude Opus").string() == "Claude Opus")
+    #expect(try sheet.inspect().findAll(ViewType.Menu.self).count == 4)
+}
+
+@MainActor
+@Test func choosingAGatewayModelFillsThatFamilyMapping() throws {
+    let mapping = MappingValue()
+    let binding = Binding<String>(get: { mapping.value }, set: { mapping.value = $0 })
+    let rows = GatewayModelMappingRows(
+        modelIDs: ["cc/claude-fable-5"],
+        opus: binding,
+        sonnet: binding,
+        haiku: binding,
+        fable: binding
+    )
+    let root = try rows.inspect()
+    let menu = try #require(root.findAll(ViewType.Menu.self).first)
+
+    try menu.find(button: "cc/claude-fable-5").tap()
+
+    #expect(mapping.value == "cc/claude-fable-5")
+}
+
+private final class MappingValue {
+    var value = ""
 }
 
 // Pins the Task 3 review's Critical finding: `AppModel.actionError` was set

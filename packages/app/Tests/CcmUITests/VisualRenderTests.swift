@@ -152,6 +152,40 @@ import Testing
     try png.write(to: URL(fileURLWithPath: output))
 }
 
+/// OREODECK_GATEWAY_MODAL_QA_PATH=/tmp/oreodeck-gateway-modal.png swift test ... --filter gatewayModelSelectorVisualRender
+@MainActor
+@Test func gatewayModelSelectorVisualRender() async throws {
+    guard let output = ProcessInfo.processInfo.environment["OREODECK_GATEWAY_MODAL_QA_PATH"] else { return }
+    let root = AddGatewaySheet(
+        model: AppModel(backend: FakeBackend()),
+        initialModelIndex: GatewayModelIndexView(
+            state: "connected",
+            endpoint: "https://gateway.example.com/v1/models",
+            modelIds: ["cc/claude-fable-5", "cc/claude-opus-5", "cc/claude-sonnet-5", "cc/claude-haiku-4-5"],
+            message: "Connected — 4 models available."
+        )
+    )
+    .preferredColorScheme(.dark)
+    let hosting = NSHostingView(rootView: root)
+    hosting.frame = NSRect(x: 0, y: 0, width: 680, height: 610)
+    let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    window.contentView = hosting
+    window.makeKeyAndOrderFront(nil)
+    window.layoutIfNeeded()
+    hosting.layoutSubtreeIfNeeded()
+    try await Task.sleep(for: .milliseconds(100))
+    guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+        Issue.record("Gateway modal could not be rendered to PNG")
+        return
+    }
+    hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else {
+        Issue.record("Gateway modal bitmap could not be encoded as PNG")
+        return
+    }
+    try png.write(to: URL(fileURLWithPath: output))
+}
+
 /// OREODECK_SETTINGS_QA_PATH=/tmp/oreodeck-settings.png swift test ... --filter settingsVisualRender
 @MainActor
 @Test func settingsVisualRender() async throws {

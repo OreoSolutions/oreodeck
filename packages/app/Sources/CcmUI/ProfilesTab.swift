@@ -366,6 +366,22 @@ struct AddGatewaySheet: View {
     @State private var sonnet = ""
     @State private var haiku = ""
     @State private var fable = ""
+    @State private var discoveredModelIndex: GatewayModelIndexView?
+    @State private var endpointMessage: String?
+    @State private var isCheckingEndpoint = false
+
+    init(model: AppModel, initialModelIndex: GatewayModelIndexView? = nil) {
+        self.model = model
+        self._discoveredModelIndex = State(initialValue: initialModelIndex)
+    }
+
+    private var hasConnectionInputs: Bool {
+        !baseUrl.trimmingCharacters(in: .whitespaces).isEmpty && !key.isEmpty
+    }
+
+    private var hasDiscoveredModels: Bool {
+        !(discoveredModelIndex?.modelIds.isEmpty ?? true)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -373,29 +389,52 @@ struct AddGatewaySheet: View {
                 title: "Add gateway profile",
                 subtitle: "Connect Claude Code through an Anthropic-compatible HTTPS gateway.",
                 systemImage: "point.3.connected.trianglepath.dotted",
-                tone: .purple
+                tone: OreoTheme.terracotta
             )
             OreoModalSection {
                 VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Profile name").font(.caption.weight(.semibold))
+                    GatewayFormRow("Profile name") {
                         TextField("e.g. team-gateway", text: $name)
                             .textFieldStyle(.roundedBorder)
                             .controlSize(.large)
                     }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Gateway URL").font(.caption.weight(.semibold))
+                    GatewayFormRow("Gateway URL") {
                         TextField("https://gateway.example.com/anthropic", text: $baseUrl)
                             .textFieldStyle(.roundedBorder)
                             .controlSize(.large)
                     }
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Gateway API key").font(.caption.weight(.semibold))
+                    GatewayFormRow("API key") {
                         SecureField("Token", text: $key)
                             .textFieldStyle(.roundedBorder)
                             .controlSize(.large)
                     }
-                    GatewayModelMappingFields(opus: $opus, sonnet: $sonnet, haiku: $haiku, fable: $fable)
+
+                    HStack(spacing: 10) {
+                        Spacer().frame(width: 142)
+                        Button(isCheckingEndpoint ? "Checking…" : "Check endpoint") { checkEndpoint() }
+                            .buttonStyle(.bordered)
+                            .disabled(!hasConnectionInputs || isCheckingEndpoint)
+                            .accessibilityLabel("Check gateway endpoint for available models")
+                        if let endpointMessage {
+                            Label(endpointMessage, systemImage: endpointStatusIcon)
+                                .font(.caption)
+                                .foregroundStyle(endpointStatusColor)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                    }
+
+                    if hasDiscoveredModels {
+                        Divider().padding(.vertical, 2)
+                        GatewayModelMappingRows(
+                            modelIDs: discoveredModelIndex!.modelIds,
+                            opus: $opus,
+                            sonnet: $sonnet,
+                            haiku: $haiku,
+                            fable: $fable
+                        )
+                    }
+
                     Label("The URL is saved with this profile. The token stays only in macOS Keychain.", systemImage: "lock.shield.fill")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -418,9 +457,49 @@ struct AddGatewaySheet: View {
             .controlSize(.large)
         }
         .onAppear { model.dismissActionError() }
+        .onChange(of: baseUrl) { _, _ in clearDiscoveredModels() }
+        .onChange(of: key) { _, _ in clearDiscoveredModels() }
         .padding(22)
-        .frame(width: 500)
+        .frame(width: 680)
         .background(OreoTheme.canvas)
+    }
+
+    private var endpointStatusIcon: String {
+        switch discoveredModelIndex?.state {
+        case "connected": "checkmark.circle.fill"
+        case "unauthorized": "key.slash.fill"
+        default: "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var endpointStatusColor: Color {
+        switch discoveredModelIndex?.state {
+        case "connected": .green
+        case "unauthorized": .orange
+        default: .secondary
+        }
+    }
+
+    private func clearDiscoveredModels() {
+        isCheckingEndpoint = false
+        discoveredModelIndex = nil
+        endpointMessage = nil
+    }
+
+    private func checkEndpoint() {
+        guard hasConnectionInputs else { return }
+        let requestedURL = baseUrl.trimmingCharacters(in: .whitespaces)
+        let requestedKey = key
+        isCheckingEndpoint = true
+        endpointMessage = nil
+        discoveredModelIndex = nil
+        Task {
+            let result = await model.probeGatewayModels(baseUrl: requestedURL, key: requestedKey)
+            guard baseUrl.trimmingCharacters(in: .whitespaces) == requestedURL, key == requestedKey else { return }
+            discoveredModelIndex = result
+            endpointMessage = result?.message ?? "Could not check the gateway. Verify its URL and API key."
+            isCheckingEndpoint = false
+        }
     }
 
     private func submit() {
@@ -438,6 +517,80 @@ struct AddGatewaySheet: View {
             )
             isSubmitting = false
             if model.actionError == nil { dismiss() }
+        }
+    }
+}
+
+private struct GatewayFormRow<Content: View>: View {
+    let label: String
+    let content: Content
+
+    init(_ label: String, @ViewBuilder content: () -> Content) {
+        self.label = label
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(label)
+                .font(.callout.weight(.semibold))
+                .frame(width: 114, alignment: .trailing)
+            Image(systemName: "arrow.right")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            content
+        }
+    }
+}
+
+struct GatewayModelMappingRows: View {
+    let modelIDs: [String]
+    @Binding var opus: String
+    @Binding var sonnet: String
+    @Binding var haiku: String
+    @Binding var fable: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("Model mapping").font(.callout.weight(.semibold))
+            Text("Choose a provider model or type an ID directly. Blank keeps Claude's default.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            mappingRow("Claude Fable", mapping: $fable)
+            mappingRow("Claude Opus", mapping: $opus)
+            mappingRow("Claude Sonnet", mapping: $sonnet)
+            mappingRow("Claude Haiku", mapping: $haiku)
+        }
+    }
+
+    private func mappingRow(_ family: String, mapping: Binding<String>) -> some View {
+        HStack(spacing: 10) {
+            Text(family)
+                .font(.callout.weight(.semibold))
+                .frame(width: 114, alignment: .trailing)
+            Image(systemName: "arrow.right")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 18)
+            TextField("Provider model ID", text: mapping)
+                .textFieldStyle(.roundedBorder)
+            if !mapping.wrappedValue.isEmpty {
+                Button {
+                    mapping.wrappedValue = ""
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Clear \(family) mapping")
+            }
+            Menu("Select model") {
+                ForEach(modelIDs, id: \.self) { modelID in
+                    Button(modelID) { mapping.wrappedValue = modelID }
+                }
+            }
+            .menuStyle(.button)
+            .accessibilityLabel("Select model for \(family)")
         }
     }
 }
