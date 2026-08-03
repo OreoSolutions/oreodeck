@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { profileDir } from "./paths";
 import { getApiKey } from "./keychain";
-import { getProfile, type Profile } from "./profile-store";
+import { getProfile, type GatewayModelMappingKey, type Profile } from "./profile-store";
 import { syncSharedConfiguration } from "./shared-config";
 import { ensureBuiltinOreoDeckSkill } from "./builtin-skills";
 import { ensureUsageStatuslineProxy } from "./statusline-proxy";
@@ -9,6 +9,13 @@ import { ensureUsageStatuslineProxy } from "./statusline-proxy";
 export interface LaunchResult {
   code: number;
 }
+
+const GATEWAY_MODEL_ENV: Record<GatewayModelMappingKey, string> = {
+  opus: "ANTHROPIC_DEFAULT_OPUS_MODEL",
+  sonnet: "ANTHROPIC_DEFAULT_SONNET_MODEL",
+  haiku: "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+  fable: "ANTHROPIC_DEFAULT_FABLE_MODEL",
+};
 
 /**
  * Env cho tiến trình claude con. Mấu chốt là CLAUDE_CONFIG_DIR — nó khiến
@@ -30,6 +37,7 @@ export async function buildEnv(
   delete env.ANTHROPIC_API_KEY;
   delete env.ANTHROPIC_AUTH_TOKEN;
   delete env.ANTHROPIC_BASE_URL;
+  for (const variable of Object.values(GATEWAY_MODEL_ENV)) delete env[variable];
   if (profile.kind === "api-key") {
     if (!apiKey) throw new Error(`No API key stored for profile "${profile.name}".`);
     env.ANTHROPIC_API_KEY = apiKey;
@@ -38,6 +46,9 @@ export async function buildEnv(
     if (!profile.gatewayBaseUrl) throw new Error(`Gateway profile "${profile.name}" has no base URL.`);
     env.ANTHROPIC_BASE_URL = profile.gatewayBaseUrl;
     env.ANTHROPIC_AUTH_TOKEN = apiKey;
+    for (const [family, modelId] of Object.entries(profile.modelMappings ?? {})) {
+      if (modelId) env[GATEWAY_MODEL_ENV[family as GatewayModelMappingKey]] = modelId;
+    }
   }
   return env;
 }

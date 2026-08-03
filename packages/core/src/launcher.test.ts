@@ -48,6 +48,47 @@ test("buildEnv injects only the selected gateway credentials", async () => {
   expect(env.ANTHROPIC_BASE_URL).toBe("https://gateway.example.com/anthropic");
 });
 
+test("buildEnv applies gateway model mappings without inheriting other aliases", async () => {
+  const env = await buildEnv(
+    {
+      name: "gateway",
+      kind: "gateway",
+      gatewayBaseUrl: "https://gateway.example.com/anthropic",
+      modelMappings: { opus: "provider/opus", fable: "provider/fable" },
+    },
+    "gateway-secret",
+    {
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "shell/opus",
+      ANTHROPIC_DEFAULT_SONNET_MODEL: "shell/sonnet",
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: "shell/haiku",
+      ANTHROPIC_DEFAULT_FABLE_MODEL: "shell/fable",
+    },
+  );
+
+  expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBe("provider/opus");
+  expect(env.ANTHROPIC_DEFAULT_FABLE_MODEL).toBe("provider/fable");
+  expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBeUndefined();
+  expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBeUndefined();
+});
+
+test("buildEnv clears inherited gateway model mappings for non-gateway profiles", async () => {
+  const env = await buildEnv(
+    { name: "bot", kind: "api-key" },
+    "sk-ant-x",
+    {
+      ANTHROPIC_DEFAULT_OPUS_MODEL: "shell/opus",
+      ANTHROPIC_DEFAULT_SONNET_MODEL: "shell/sonnet",
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: "shell/haiku",
+      ANTHROPIC_DEFAULT_FABLE_MODEL: "shell/fable",
+    },
+  );
+
+  expect(env.ANTHROPIC_DEFAULT_OPUS_MODEL).toBeUndefined();
+  expect(env.ANTHROPIC_DEFAULT_SONNET_MODEL).toBeUndefined();
+  expect(env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBeUndefined();
+  expect(env.ANTHROPIC_DEFAULT_FABLE_MODEL).toBeUndefined();
+});
+
 test("buildEnv strips an inherited ANTHROPIC_API_KEY for subscription profiles", async () => {
   const env = await buildEnv(
     { name: "work", kind: "subscription" },
