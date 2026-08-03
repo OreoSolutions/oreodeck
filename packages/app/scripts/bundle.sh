@@ -4,7 +4,12 @@ set -euo pipefail
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT_DIR="$(cd "$APP_DIR/../.." && pwd)"
-BUNDLE="${1:-$ROOT_DIR/dist/OreoDeck.app}"
+BUNDLE_INPUT="${1:-dist/OreoDeck.app}"
+if [[ "$BUNDLE_INPUT" = /* ]]; then
+    BUNDLE="$BUNDLE_INPUT"
+else
+    BUNDLE="$ROOT_DIR/$BUNDLE_INPUT"
+fi
 VERSION="$(cd "$ROOT_DIR" && bun -e 'console.log((await Bun.file("package.json").json()).version)')"
 
 "$APP_DIR/scripts/generate.sh"
