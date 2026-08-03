@@ -7,6 +7,21 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-08-03
+
+### Changed
+
+- Rebranded OreoDeck with the Companion Deck identity: a new macOS app icon,
+  repository artwork, and release-ready social assets using a warm
+  Claude Code companion palette.
+- Added OreoDeck website links to the English, Vietnamese, and Simplified
+  Chinese READMEs, package metadata, and the native app Settings screen.
+
+### Fixed
+
+- `bun run build:app` now writes a relative output path to the repository's
+  `dist/OreoDeck.app`, preventing a stale root bundle when building a release.
+
 ## [0.1.9] - 2026-07-23
 
 ### Added
@@ -186,7 +201,7 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   supported during the OreoDeck migration.
 - Legacy Keychain entries under `com.oreo.ccm` remain readable and removable.
 
-[Unreleased]: https://github.com/OreoSolutions/oreodeck/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/OreoSolutions/oreodeck/compare/v0.1.10...HEAD
 [0.1.0]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.0
 [0.1.1]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.1
 [0.1.2]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.2
@@ -197,3 +212,4 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 [0.1.7]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.7
 [0.1.8]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.8
 [0.1.9]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.9
+[0.1.10]: https://github.com/OreoSolutions/oreodeck/releases/tag/v0.1.10
