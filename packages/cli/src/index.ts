@@ -68,6 +68,10 @@ program
   .argument("<name>", "profile name")
   .option("--api-key", "create an API key profile instead of a subscription login")
   .option("--gateway <url>", "create an Anthropic-compatible gateway profile")
+  .option("--opus-model <id>", "map the Claude Opus alias for a gateway")
+  .option("--sonnet-model <id>", "map the Claude Sonnet alias for a gateway")
+  .option("--haiku-model <id>", "map the Claude Haiku alias for a gateway")
+  .option("--fable-model <id>", "map the Claude Fable alias for a gateway")
   .action(addCommand);
 
 program

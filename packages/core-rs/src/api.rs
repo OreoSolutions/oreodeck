@@ -65,6 +65,7 @@ pub struct ProfileView {
     pub kind: String,
     pub active: bool,
     pub shared_resources: Vec<String>,
+    pub model_mappings: Option<store::GatewayModelMappings>,
 }
 
 #[derive(Debug, uniffi::Record)]
@@ -131,6 +132,7 @@ pub fn list_profiles() -> Result<Vec<ProfileView>, CcmError> {
                 name: p.name,
                 kind: kind_str(p.kind),
                 shared_resources,
+                model_mappings: p.model_mappings,
             }
         })
         .collect())
@@ -225,12 +227,13 @@ fn add_gateway_profile_with<S>(
     name: &str,
     base_url: &str,
     key: &str,
+    model_mappings: store::GatewayModelMappings,
     set_key: S,
 ) -> Result<(), CcmError>
 where
     S: FnOnce(&str, &str) -> Result<(), CcmError>,
 {
-    store::add_gateway_profile(name, base_url)?;
+    store::add_gateway_profile_with_mappings(name, base_url, model_mappings)?;
     if let Err(error) = set_key(name, key) {
         let _ = store::remove_profile(name);
         return Err(error);
@@ -240,10 +243,23 @@ where
 
 /// `key` is passed directly to Keychain and never persisted in config.json.
 #[uniffi::export]
-pub fn add_gateway_profile(name: String, base_url: String, key: String) -> Result<(), CcmError> {
-    add_gateway_profile_with(&name, &base_url, &key, |n, k| {
+pub fn add_gateway_profile(
+    name: String,
+    base_url: String,
+    key: String,
+    model_mappings: store::GatewayModelMappings,
+) -> Result<(), CcmError> {
+    add_gateway_profile_with(&name, &base_url, &key, model_mappings, |n, k| {
         Ok(keychain::set_api_key(n, k)?)
     })
+}
+
+#[uniffi::export]
+pub fn update_gateway_model_mappings(
+    name: String,
+    model_mappings: store::GatewayModelMappings,
+) -> Result<(), CcmError> {
+    Ok(store::update_gateway_model_mappings(&name, model_mappings)?)
 }
 
 /// Testable core of `remove_profile`. Resolves the CANONICAL stored name

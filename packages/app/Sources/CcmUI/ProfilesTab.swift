@@ -10,6 +10,7 @@ public struct ProfilesTab: View {
     @State private var showAddGateway = false
     @State private var rowPendingRemoval: ProfileRow?
     @State private var rowSharingResources: ProfileRow?
+    @State private var rowEditingGatewayMappings: ProfileRow?
 
     private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
 
@@ -126,6 +127,13 @@ public struct ProfilesTab: View {
                     } label: {
                         Label("Shared resources…", systemImage: "link")
                     }
+                    if selectedRow?.kind == "gateway" {
+                        Button {
+                            rowEditingGatewayMappings = selectedRow
+                        } label: {
+                            Label("Edit model mapping…", systemImage: "slider.horizontal.3")
+                        }
+                    }
                     Divider()
                     Button(role: .destructive) {
                         rowPendingRemoval = selectedRow
@@ -212,6 +220,9 @@ public struct ProfilesTab: View {
         .sheet(item: $rowSharingResources) { row in
             SharedResourcesSheet(model: model, row: row)
         }
+        .sheet(item: $rowEditingGatewayMappings) { row in
+            EditGatewayModelMappingsSheet(model: model, row: row)
+        }
     }
 
     private var profileCommands: [CLICommandSuggestion] {
@@ -265,6 +276,10 @@ struct AddGatewaySheet: View {
     @State private var baseUrl = ""
     @State private var key = ""
     @State private var isSubmitting = false
+    @State private var opus = ""
+    @State private var sonnet = ""
+    @State private var haiku = ""
+    @State private var fable = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -294,6 +309,7 @@ struct AddGatewaySheet: View {
                             .textFieldStyle(.roundedBorder)
                             .controlSize(.large)
                     }
+                    GatewayModelMappingFields(opus: $opus, sonnet: $sonnet, haiku: $haiku, fable: $fable)
                     Label("The URL is saved with this profile. The token stays only in macOS Keychain.", systemImage: "lock.shield.fill")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -328,10 +344,93 @@ struct AddGatewaySheet: View {
         key = ""
         isSubmitting = true
         Task {
-            await model.addGatewayProfile(name: profileName, baseUrl: profileBaseUrl, key: profileKey)
+            await model.addGatewayProfile(
+                name: profileName,
+                baseUrl: profileBaseUrl,
+                key: profileKey,
+                modelMappings: gatewayModelMappings(opus: opus, sonnet: sonnet, haiku: haiku, fable: fable)
+            )
             isSubmitting = false
             if model.actionError == nil { dismiss() }
         }
+    }
+}
+
+private func gatewayModelMappings(
+    opus: String, sonnet: String, haiku: String, fable: String
+) -> GatewayModelMappings {
+    GatewayModelMappings(opus: opus, sonnet: sonnet, haiku: haiku, fable: fable)
+}
+
+private struct GatewayModelMappingFields: View {
+    @Binding var opus: String
+    @Binding var sonnet: String
+    @Binding var haiku: String
+    @Binding var fable: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Optional model mapping").font(.caption.weight(.semibold))
+            Text("Leave blank to keep Claude's default model for that family.")
+                .font(.caption2).foregroundStyle(.secondary)
+            TextField("Opus provider model ID", text: $opus).textFieldStyle(.roundedBorder)
+            TextField("Sonnet provider model ID", text: $sonnet).textFieldStyle(.roundedBorder)
+            TextField("Haiku provider model ID", text: $haiku).textFieldStyle(.roundedBorder)
+            TextField("Fable provider model ID", text: $fable).textFieldStyle(.roundedBorder)
+        }
+    }
+}
+
+private struct EditGatewayModelMappingsSheet: View {
+    @ObservedObject var model: AppModel
+    let row: ProfileRow
+    @Environment(\.dismiss) private var dismiss
+    @State private var opus: String
+    @State private var sonnet: String
+    @State private var haiku: String
+    @State private var fable: String
+    @State private var isSaving = false
+
+    init(model: AppModel, row: ProfileRow) {
+        self.model = model
+        self.row = row
+        self._opus = State(initialValue: row.modelMappings?.opus ?? "")
+        self._sonnet = State(initialValue: row.modelMappings?.sonnet ?? "")
+        self._haiku = State(initialValue: row.modelMappings?.haiku ?? "")
+        self._fable = State(initialValue: row.modelMappings?.fable ?? "")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            OreoModalHeader(
+                title: "Edit model mapping",
+                subtitle: "Map Claude model families for \(row.name).",
+                systemImage: "slider.horizontal.3",
+                tone: .purple
+            )
+            OreoModalSection { GatewayModelMappingFields(opus: $opus, sonnet: $sonnet, haiku: $haiku, fable: $fable) }
+            if let actionError = model.actionError { ActionErrorBanner(message: actionError) { model.dismissActionError() } }
+            Divider()
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }.buttonStyle(.bordered).keyboardShortcut(.cancelAction)
+                Button(isSaving ? "Saving…" : "Save") {
+                    isSaving = true
+                    Task {
+                        await model.updateGatewayModelMappings(
+                            name: row.name,
+                            modelMappings: gatewayModelMappings(opus: opus, sonnet: sonnet, haiku: haiku, fable: fable)
+                        )
+                        isSaving = false
+                        if model.actionError == nil { dismiss() }
+                    }
+                }.buttonStyle(OreoPrimaryButtonStyle()).keyboardShortcut(.defaultAction).disabled(isSaving)
+            }.controlSize(.large)
+        }
+        .onAppear { model.dismissActionError() }
+        .padding(22)
+        .frame(width: 500)
+        .background(OreoTheme.canvas)
     }
 }
 

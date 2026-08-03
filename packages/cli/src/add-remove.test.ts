@@ -75,6 +75,26 @@ test("add --gateway stores a compatible URL but never its API key", async () => 
   expect(raw).not.toContain("gateway-secret-xyz");
 });
 
+test("add --gateway persists selected model mappings", async () => {
+  const { code } = await ccm(
+    [
+      "add", "gateway", "--gateway", "https://gateway.example.com/anthropic",
+      "--opus-model", "provider/opus", "--fable-model", "provider/fable",
+    ],
+    "gateway-secret-xyz\n",
+  );
+  expect(code).toBe(0);
+  expect((await loadConfig()).profiles[0]).toMatchObject({
+    modelMappings: { opus: "provider/opus", fable: "provider/fable" },
+  });
+});
+
+test("add rejects gateway model flags without --gateway", async () => {
+  const { stderr, code } = await ccm(["add", "work", "--opus-model", "provider/opus"]);
+  expect(code).toBe(1);
+  expect(stderr).toContain("only valid with --gateway");
+});
+
 test("add rejects --api-key combined with --gateway before asking for a token", async () => {
   const { stderr, code } = await ccm([
     "add", "gateway", "--api-key", "--gateway", "https://gateway.example.com",

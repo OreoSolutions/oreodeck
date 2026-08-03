@@ -1,6 +1,10 @@
 import CcmKit
 import Foundation
 
+public extension GatewayModelMappings {
+    static let empty = GatewayModelMappings(opus: nil, sonnet: nil, haiku: nil, fable: nil)
+}
+
 /// One line of the Profiles table / menu-bar list: `list_profiles()` (identity
 /// + active flag) joined with `get_usage()` (numbers).
 public struct ProfileRow: Identifiable, Equatable, Sendable {
@@ -21,6 +25,7 @@ public struct ProfileRow: Identifiable, Equatable, Sendable {
     public var planWeeklyResetAtMs: Int64?
     public var planUsageFetchedAtMs: Int64?
     public var sharedResources: [String]
+    public var modelMappings: GatewayModelMappings?
 
     public var id: String { name }
 
@@ -31,7 +36,7 @@ public struct ProfileRow: Identifiable, Equatable, Sendable {
         resetAtMs: Int64? = nil, planFiveHourPercent: Double? = nil,
         planFiveHourResetAtMs: Int64? = nil, planWeeklyPercent: Double? = nil,
         planWeeklyResetAtMs: Int64? = nil, planUsageFetchedAtMs: Int64? = nil,
-        sharedResources: [String] = []
+        sharedResources: [String] = [], modelMappings: GatewayModelMappings? = nil
     ) {
         self.name = name
         self.kind = kind
@@ -50,6 +55,7 @@ public struct ProfileRow: Identifiable, Equatable, Sendable {
         self.planWeeklyResetAtMs = planWeeklyResetAtMs
         self.planUsageFetchedAtMs = planUsageFetchedAtMs
         self.sharedResources = sharedResources
+        self.modelMappings = modelMappings
     }
 }
 
@@ -81,7 +87,8 @@ public func mergeRows(profiles: [ProfileView], usage: [ProfileUsageView]) -> [Pr
             planWeeklyPercent: u?.planWeeklyPercent,
             planWeeklyResetAtMs: u?.planWeeklyResetAtMs,
             planUsageFetchedAtMs: u?.planUsageFetchedAtMs,
-            sharedResources: p.sharedResources
+            sharedResources: p.sharedResources,
+            modelMappings: p.modelMappings
         )
     }
 }

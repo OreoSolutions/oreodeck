@@ -1,20 +1,36 @@
 import { spawn } from "node:child_process";
-import { addProfile, addGatewayProfile, setApiKey, removeProfile, buildEnv } from "@ccm/core";
+import {
+  addProfile, addGatewayProfile, setApiKey, removeProfile, buildEnv,
+  type GatewayModelMappings,
+} from "@ccm/core";
 import { promptHidden } from "../prompt";
 
 interface AddOptions {
   apiKey?: boolean;
   gateway?: string;
+  opusModel?: string;
+  sonnetModel?: string;
+  haikuModel?: string;
+  fableModel?: string;
 }
 
 export async function addCommand(name: string, opts: AddOptions): Promise<void> {
+  const modelMappings: GatewayModelMappings = {
+    ...(opts.opusModel === undefined ? {} : { opus: opts.opusModel }),
+    ...(opts.sonnetModel === undefined ? {} : { sonnet: opts.sonnetModel }),
+    ...(opts.haikuModel === undefined ? {} : { haiku: opts.haikuModel }),
+    ...(opts.fableModel === undefined ? {} : { fable: opts.fableModel }),
+  };
+  if (!opts.gateway && Object.keys(modelMappings).length > 0) {
+    throw new Error("Gateway model flags are only valid with --gateway <url>.");
+  }
   if (opts.apiKey && opts.gateway) {
     throw new Error("Choose either --api-key or --gateway <url>, not both.");
   }
   if (opts.gateway) {
     const key = await promptHidden("Gateway API key: ");
     if (!key) throw new Error("No API key entered. Aborted.");
-    await addGatewayProfile(name, opts.gateway);
+    await addGatewayProfile(name, opts.gateway, modelMappings);
     try {
       await setApiKey(name, key);
     } catch (err) {

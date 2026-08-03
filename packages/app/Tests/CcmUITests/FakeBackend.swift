@@ -21,7 +21,8 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     private(set) var openLoginTerminalCalls: [String] = []
     private(set) var removeCalls: [String] = []
     private(set) var addApiKeyCalls: [(name: String, key: String)] = []
-    private(set) var addGatewayCalls: [(name: String, baseUrl: String, key: String)] = []
+    private(set) var addGatewayCalls: [(name: String, baseUrl: String, key: String, modelMappings: GatewayModelMappings)] = []
+    private(set) var updateGatewayMappingCalls: [(name: String, modelMappings: GatewayModelMappings)] = []
     private(set) var setFailoverEnabledCalls: [Bool] = []
     private(set) var setFailoverOrderCalls: [[String]] = []
     private(set) var openConfigCallCount = 0
@@ -93,12 +94,15 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
             _profiles.append(ProfileView(name: name, kind: "api-key", active: false))
         }
     }
-    func addGatewayProfile(name: String, baseUrl: String, key: String) throws {
+    func addGatewayProfile(name: String, baseUrl: String, key: String, modelMappings: GatewayModelMappings) throws {
         try lock.withLock {
-            addGatewayCalls.append((name, baseUrl, key))
+            addGatewayCalls.append((name, baseUrl, key, modelMappings))
             if let addApiKeyError { throw addApiKeyError }
             _profiles.append(ProfileView(name: name, kind: "gateway", active: false))
         }
+    }
+    func updateGatewayModelMappings(name: String, modelMappings: GatewayModelMappings) throws {
+        lock.withLock { updateGatewayMappingCalls.append((name, modelMappings)) }
     }
     func removeProfile(name: String) throws {
         try lock.withLock {

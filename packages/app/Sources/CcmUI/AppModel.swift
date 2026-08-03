@@ -203,9 +203,19 @@ public final class AppModel: ObservableObject {
     /// Gateway credentials follow the same Keychain-only boundary as direct
     /// API keys. The URL is non-secret profile configuration; the token is not
     /// retained by the view model after this backend call returns.
-    public func addGatewayProfile(name: String, baseUrl: String, key: String) async {
+    public func addGatewayProfile(
+        name: String,
+        baseUrl: String,
+        key: String,
+        modelMappings: GatewayModelMappings = .empty
+    ) async {
         let backend = self.backend
-        await perform { try backend.addGatewayProfile(name: name, baseUrl: baseUrl, key: key) }
+        await perform { try backend.addGatewayProfile(name: name, baseUrl: baseUrl, key: key, modelMappings: modelMappings) }
+    }
+
+    public func updateGatewayModelMappings(name: String, modelMappings: GatewayModelMappings) async {
+        let backend = self.backend
+        await perform { try backend.updateGatewayModelMappings(name: name, modelMappings: modelMappings) }
     }
 
     /// Opens `ccm add <name>` in Terminal (the OAuth /login flow only works in
