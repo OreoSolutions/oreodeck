@@ -186,6 +186,54 @@ import Testing
     try png.write(to: URL(fileURLWithPath: output))
 }
 
+/// OREODECK_PROFILE_DETAIL_QA_PATH=/tmp/oreodeck-profile-detail.png swift test ... --filter gatewayProfileDetailVisualRender
+@MainActor
+@Test func gatewayProfileDetailVisualRender() async throws {
+    guard let output = ProcessInfo.processInfo.environment["OREODECK_PROFILE_DETAIL_QA_PATH"] else { return }
+    let backend = FakeBackend()
+    backend.set(profiles: [
+        ProfileView(
+            name: "openai", kind: "gateway", active: true, sharedResources: [],
+            modelMappings: GatewayModelMappings(
+                opus: "cx/gpt-5.6-terra", sonnet: "cx/gpt-5.6-luna",
+                haiku: "cx/gpt-5.6-luna", fable: "cx/gpt-5.6-sol"
+            )
+        )
+    ])
+    backend.set(gatewayConnection: GatewayConnectionView(
+        state: "connected",
+        endpoint: "http://localhost:20128/v1/models",
+        modelCount: 14,
+        message: "Connected — 14 models available."
+    ), for: "openai")
+    let model = AppModel(backend: backend)
+    await model.load()
+    await model.checkGatewayConnection(name: "openai")
+    let root = ProfilesTab(model: model, initialSelection: "openai")
+        .padding(24)
+        .frame(width: 1120, height: 620, alignment: .topLeading)
+        .background(OreoTheme.canvas)
+        .preferredColorScheme(.dark)
+    let hosting = NSHostingView(rootView: root)
+    hosting.frame = NSRect(x: 0, y: 0, width: 1120, height: 620)
+    let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    window.contentView = hosting
+    window.makeKeyAndOrderFront(nil)
+    window.layoutIfNeeded()
+    hosting.layoutSubtreeIfNeeded()
+    try await Task.sleep(for: .milliseconds(100))
+    guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+        Issue.record("Gateway profile detail could not be rendered to PNG")
+        return
+    }
+    hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else {
+        Issue.record("Gateway profile detail bitmap could not be encoded as PNG")
+        return
+    }
+    try png.write(to: URL(fileURLWithPath: output))
+}
+
 /// OREODECK_SETTINGS_QA_PATH=/tmp/oreodeck-settings.png swift test ... --filter settingsVisualRender
 @MainActor
 @Test func settingsVisualRender() async throws {

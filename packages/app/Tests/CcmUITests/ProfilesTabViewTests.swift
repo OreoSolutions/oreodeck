@@ -25,6 +25,26 @@ import ViewInspector
 }
 
 @MainActor
+@Test func selectedGatewayProfileCanScrollWhenItsDetailsExceedTheWindow() async throws {
+    let backend = FakeBackend()
+    backend.set(profiles: [
+        ProfileView(
+            name: "openai", kind: "gateway", active: true, sharedResources: [],
+            modelMappings: GatewayModelMappings(
+                opus: "cx/gpt-5.6-terra", sonnet: "cx/gpt-5.6-luna",
+                haiku: "cx/gpt-5.6-luna", fable: "cx/gpt-5.6-sol"
+            )
+        )
+    ])
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    let tab = ProfilesTab(model: model, initialSelection: "openai")
+
+    _ = try tab.inspect().find(ViewType.ScrollView.self)
+}
+
+@MainActor
 @Test func addGatewaySheetRequiresAnExplicitEndpointCheckBeforeShowingModelMappings() throws {
     let sheet = AddGatewaySheet(model: AppModel(backend: FakeBackend()))
 

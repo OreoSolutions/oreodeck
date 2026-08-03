@@ -24,13 +24,14 @@ public struct ProfilesTab: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            PageHeader(
-                eyebrow: "Identity deck",
-                title: "Profiles",
-                subtitle: "Keep Claude accounts isolated and launch the right identity on demand.",
-                systemImage: "person.crop.rectangle.stack"
-            )
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                PageHeader(
+                    eyebrow: "Identity deck",
+                    title: "Profiles",
+                    subtitle: "Keep Claude accounts isolated and launch the right identity on demand.",
+                    systemImage: "person.crop.rectangle.stack"
+                )
             HStack(spacing: 10) {
                 summaryCard(
                     title: "Profiles",
@@ -207,7 +208,10 @@ public struct ProfilesTab: View {
                 }
             }
 
-            CommandSuggestions(model: model, commands: profileCommands)
+                CommandSuggestions(model: model, commands: profileCommands)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 24)
         }
         .onAppear { Task { await model.surfaceAppeared(.profilesTab) } }
         .onDisappear { model.surfaceDisappeared(.profilesTab) }
