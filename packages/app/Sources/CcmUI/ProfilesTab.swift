@@ -104,9 +104,16 @@ public struct ProfilesTab: View {
                 .frame(height: tableHeight)
 
                 if let selectedRow {
-                    ProfileDetailCard(row: selectedRow, connection: model.gatewayConnections[selectedRow.name]) {
-                        Task { await model.checkGatewayConnection(name: selectedRow.name) }
-                    }
+                    ProfileDetailCard(
+                        row: selectedRow,
+                        connection: model.gatewayConnections[selectedRow.name],
+                        subscriptionSync: model.subscriptionUsageSyncs[selectedRow.name],
+                        directSubscriptionSyncEnabled: model.directSubscriptionUsageSyncEnabled,
+                        nowMs: model.nowMs,
+                        checkConnection: { Task { await model.checkGatewayConnection(name: selectedRow.name) } },
+                        refreshSubscriptionUsage: { Task { await model.refreshSubscriptionUsage(name: selectedRow.name, force: true) } },
+                        loginAgain: { Task { await model.loginAgain(name: selectedRow.name) } }
+                    )
                 }
             }
 
@@ -283,7 +290,12 @@ public struct ProfilesTab: View {
 private struct ProfileDetailCard: View {
     let row: ProfileRow
     let connection: GatewayConnectionView?
+    let subscriptionSync: SubscriptionUsageSyncView?
+    let directSubscriptionSyncEnabled: Bool
+    let nowMs: Int64
     let checkConnection: () -> Void
+    let refreshSubscriptionUsage: () -> Void
+    let loginAgain: () -> Void
 
     var body: some View {
         OreoSectionCard("Selected profile", subtitle: row.active ? "Active for new sessions" : "Ready when you are") {
@@ -319,6 +331,14 @@ private struct ProfileDetailCard: View {
                     alias("Haiku", row.modelMappings?.haiku)
                     alias("Fable", row.modelMappings?.fable)
                 }
+            } else if row.kind == "subscription" {
+                SubscriptionUsageSyncStatus(
+                    sync: subscriptionSync,
+                    enabled: directSubscriptionSyncEnabled,
+                    nowMs: nowMs,
+                    refresh: refreshSubscriptionUsage,
+                    loginAgain: loginAgain
+                )
             } else {
                 Text("Use this profile for the next Claude Code session, or choose More to manage shared resources.")
                     .font(.caption)

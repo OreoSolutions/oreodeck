@@ -711,6 +711,29 @@ pub fn get_profile(name: &str) -> Result<Option<Profile>, StoreError> {
     Ok(find_profile(&load_config()?.profiles, name).cloned())
 }
 
+const DIRECT_SUBSCRIPTION_USAGE_SYNC_KEY: &str = "directSubscriptionUsageSyncEnabled";
+
+/// Experimental direct OAuth usage sync is opt-in. Store it in Config.extra
+/// so older CLIs preserve the flag instead of needing a coordinated schema
+/// upgrade across the TypeScript and Rust implementations.
+pub fn direct_subscription_usage_sync_enabled() -> Result<bool, StoreError> {
+    Ok(load_config()?
+        .extra
+        .get(DIRECT_SUBSCRIPTION_USAGE_SYNC_KEY)
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false))
+}
+
+pub fn set_direct_subscription_usage_sync_enabled(enabled: bool) -> Result<(), StoreError> {
+    update_config(|config| {
+        config.extra.insert(
+            DIRECT_SUBSCRIPTION_USAGE_SYNC_KEY.to_string(),
+            serde_json::Value::Bool(enabled),
+        );
+        Ok(())
+    })
+}
+
 fn add_profile_record(
     name: &str,
     kind: ProfileKind,
@@ -937,6 +960,30 @@ mod tests {
         ));
         assert_eq!(get_terminal().unwrap(), "ghostty");
         env::remove_var("CCM_HOME");
+    }
+
+    #[test]
+    #[serial]
+    fn direct_subscription_usage_sync_defaults_off_and_preserves_unknown_config() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+        std::fs::write(
+            config_path(),
+            br#"{"profiles":[],"active":null,"failoverEnabled":true,"failoverOrder":[],"telemetryOptIn":false}"#,
+        )
+        .unwrap();
+
+        assert_eq!(direct_subscription_usage_sync_enabled().unwrap(), false);
+        set_direct_subscription_usage_sync_enabled(true).unwrap();
+        let raw: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(config_path()).unwrap()).unwrap();
+        env::remove_var("CCM_HOME");
+
+        assert_eq!(
+            raw["directSubscriptionUsageSyncEnabled"],
+            serde_json::json!(true)
+        );
+        assert_eq!(raw["telemetryOptIn"], serde_json::json!(false));
     }
 
     #[test]

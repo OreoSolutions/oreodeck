@@ -77,6 +77,37 @@ public struct SettingsView: View {
                 }
 
                 OreoCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: "chart.bar.doc.horizontal")
+                                .foregroundStyle(OreoTheme.terracotta)
+                                .frame(width: 30, height: 30)
+                                .background(OreoTheme.terracotta.opacity(0.12), in: RoundedRectangle(cornerRadius: 9))
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 7) {
+                                    Text("Live subscription usage").font(.headline)
+                                    StatusPill(text: "Experimental", color: .orange)
+                                }
+                                Text("Check the selected Claude subscription directly while OreoDeck is open. OAuth credentials stay on this Mac and are never shown in the app.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer(minLength: 12)
+                            Toggle("Live subscription usage", isOn: Binding(
+                                get: { model.directSubscriptionUsageSyncEnabled },
+                                set: { enabled in Task { await model.setDirectSubscriptionUsageSyncEnabled(enabled) } }
+                            ))
+                            .labelsHidden()
+                            .accessibilityLabel("Enable live subscription usage")
+                        }
+                        Text("Refreshes at most once every two minutes, stops automatically when sign-in is needed, and can be refreshed manually every 15 seconds.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                OreoCard {
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {

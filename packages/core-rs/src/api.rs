@@ -1,4 +1,4 @@
-use crate::{keychain, store, terminal, usage};
+use crate::{keychain, store, subscription_usage, terminal, usage};
 use serde::Deserialize;
 use std::collections::HashSet;
 use std::time::Duration;
@@ -429,6 +429,26 @@ pub fn get_usage() -> Result<Vec<ProfileUsageView>, CcmError> {
             }
         })
         .collect())
+}
+
+/// Reads direct, display-safe Claude subscription usage for one profile. The
+/// experimental operation keeps OAuth credential handling and response parsing
+/// inside the Rust core; Swift only receives this redacted record.
+#[uniffi::export]
+pub fn get_subscription_usage_sync(
+    name: String,
+) -> Result<subscription_usage::SubscriptionUsageSyncView, CcmError> {
+    Ok(subscription_usage::get_subscription_usage_sync(&name)?)
+}
+
+#[uniffi::export]
+pub fn get_direct_subscription_usage_sync_enabled() -> Result<bool, CcmError> {
+    Ok(store::direct_subscription_usage_sync_enabled()?)
+}
+
+#[uniffi::export]
+pub fn set_direct_subscription_usage_sync_enabled(enabled: bool) -> Result<(), CcmError> {
+    Ok(store::set_direct_subscription_usage_sync_enabled(enabled)?)
 }
 
 #[uniffi::export]

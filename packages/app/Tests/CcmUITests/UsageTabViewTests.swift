@@ -109,3 +109,29 @@ import ViewInspector
     #expect(try tab.inspect().find(text: "No Claude usage cache yet. Open this profile in Claude and run /usage.").string()
         == "No Claude usage cache yet. Open this profile in Claude and run /usage.")
 }
+
+@MainActor
+@Test func aLiveSubscriptionResultIsLabeledAndUsedInsteadOfTheClaudeCache() async throws {
+    let backend = FakeBackend()
+    backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)])
+    backend.set(directSubscriptionUsageSyncEnabled: true)
+    backend.set(subscriptionUsageSync: SubscriptionUsageSyncView(
+        state: "connected",
+        message: "Connected — subscription usage is live.",
+        fetchedAtMs: 1_700_000_000_000,
+        retryAfterMs: nil,
+        fiveHourPercent: 37,
+        fiveHourResetAtMs: nil,
+        weeklyPercent: 12,
+        weeklyResetAtMs: nil,
+        extraUsageSpendUsd: 2.5,
+        extraUsageLimitUsd: 10
+    ), for: "work")
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    let tab = UsageTab(model: model)
+    #expect(try tab.inspect().find(text: "Live subscription usage").string() == "Live subscription usage")
+    #expect(try tab.inspect().find(text: "37% used").string() == "37% used")
+    #expect(try tab.inspect().find(text: "$2.50 of $10.00 extra usage").string() == "$2.50 of $10.00 extra usage")
+}

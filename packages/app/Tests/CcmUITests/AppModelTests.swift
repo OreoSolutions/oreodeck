@@ -5,6 +5,65 @@ import Testing
 @testable import CcmUI
 
 @MainActor
+@Test func directSubscriptionRefreshPublishesOnlyTheRequestedProfilesSafeState() async {
+    let backend = FakeBackend()
+    backend.set(subscriptionUsageSync: SubscriptionUsageSyncView(
+        state: "connected",
+        message: "Connected — subscription usage is live.",
+        fetchedAtMs: 1_700_000_000_000,
+        retryAfterMs: nil,
+        fiveHourPercent: 37,
+        fiveHourResetAtMs: nil,
+        weeklyPercent: 12,
+        weeklyResetAtMs: nil,
+        extraUsageSpendUsd: nil,
+        extraUsageLimitUsd: nil
+    ), for: "work")
+    let model = AppModel(backend: backend)
+
+    await model.refreshSubscriptionUsage(name: "work", force: true)
+
+    #expect(backend.getSubscriptionUsageSyncCalls == ["work"])
+    #expect(model.subscriptionUsageSyncs["work"]?.state == "connected")
+    #expect(model.subscriptionUsageSyncs["other"] == nil)
+}
+
+@MainActor
+@Test func loginAgainOpensOnlyTheSelectedExistingProfile() async {
+    let backend = FakeBackend()
+    let model = AppModel(backend: backend)
+
+    await model.loginAgain(name: "work")
+
+    #expect(backend.openSessionCalls == ["work"])
+    #expect(backend.openLoginTerminalCalls.isEmpty)
+}
+
+@MainActor
+@Test func aRateLimitedSubscriptionResultPreventsAnImmediateManualRetry() async {
+    let backend = FakeBackend()
+    backend.set(subscriptionUsageSync: SubscriptionUsageSyncView(
+        state: "rate-limited",
+        message: "Claude asked OreoDeck to wait before refreshing.",
+        fetchedAtMs: nil,
+        retryAfterMs: Int64(Date().timeIntervalSince1970 * 1000) + 60_000,
+        fiveHourPercent: nil,
+        fiveHourResetAtMs: nil,
+        weeklyPercent: nil,
+        weeklyResetAtMs: nil,
+        extraUsageSpendUsd: nil,
+        extraUsageLimitUsd: nil
+    ), for: "work")
+    let model = AppModel(backend: backend)
+
+    await model.refreshSubscriptionUsage(name: "work", force: true)
+    await model.refreshSubscriptionUsage(name: "work", force: true)
+
+    #expect(backend.getSubscriptionUsageSyncCalls == ["work"])
+    #expect(model.subscriptionUsageSyncs["work"]?.state == "rate-limited")
+}
+
+@MainActor
 @Test func gatewayConnectionCheckPublishesOnlyTheRequestedProfilesResult() async {
     let backend = FakeBackend()
     backend.set(gatewayConnection: GatewayConnectionView(

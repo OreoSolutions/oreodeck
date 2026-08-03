@@ -114,13 +114,13 @@ public struct UsageTab: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(active.name).font(.title3.weight(.semibold))
-                                Text(active.kind == "subscription" ? "Claude account usage" : "Local request telemetry")
+                                Text(active.kind == "subscription" ? usageSourceSubtitle(for: active) : "Local request telemetry")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
                             StatusPill(
-                                text: active.planFiveHourPercent.map { "\(Int($0.rounded()))% used" } ?? "Ready",
-                                color: active.planFiveHourPercent ?? 0 >= 90 ? .red : OreoTheme.terracotta
+                                text: planFiveHourPercent(for: active).map { "\(Int($0.rounded()))% used" } ?? "Ready",
+                                color: planFiveHourPercent(for: active) ?? 0 >= 90 ? .red : OreoTheme.terracotta
                             )
                         }
                     }
@@ -167,19 +167,34 @@ public struct UsageTab: View {
                                 }
                             }
                             if row.kind == "subscription" {
+                                SubscriptionUsageSyncStatus(
+                                    sync: model.subscriptionUsageSyncs[row.name],
+                                    enabled: model.directSubscriptionUsageSyncEnabled,
+                                    nowMs: model.nowMs,
+                                    refresh: { Task { await model.refreshSubscriptionUsage(name: row.name, force: true) } },
+                                    loginAgain: { Task { await model.loginAgain(name: row.name) } }
+                                )
                                 PlanUsageBar(
                                     label: "5-hour session",
-                                    percent: row.planFiveHourPercent,
-                                    resetAtMs: row.planFiveHourResetAtMs,
+                                    percent: planFiveHourPercent(for: row),
+                                    resetAtMs: planFiveHourResetAtMs(for: row),
                                     nowMs: model.nowMs
                                 )
                                 PlanUsageBar(
                                     label: "Weekly",
-                                    percent: row.planWeeklyPercent,
-                                    resetAtMs: row.planWeeklyResetAtMs,
+                                    percent: planWeeklyPercent(for: row),
+                                    resetAtMs: planWeeklyResetAtMs(for: row),
                                     nowMs: model.nowMs
                                 )
-                                if row.planUsageFetchedAtMs == nil {
+                                if let extraUsage = liveSync(for: row),
+                                   let spend = extraUsage.extraUsageSpendUsd,
+                                   let limit = extraUsage.extraUsageLimitUsd {
+                                    Text(extraUsageText(spend: spend, limit: limit))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .monospacedDigit()
+                                }
+                                if model.subscriptionUsageSyncs[row.name]?.state != "connected", row.planUsageFetchedAtMs == nil {
                                     Text("No Claude usage cache yet. Open this profile in Claude and run /usage.")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
@@ -200,5 +215,34 @@ public struct UsageTab: View {
         .onAppear { Task { await model.surfaceAppeared(.usageTab) } }
         .onDisappear { model.surfaceDisappeared(.usageTab) }
         .onReceive(timer) { _ in Task { await model.tick() } }
+    }
+
+    private func liveSync(for row: ProfileRow) -> SubscriptionUsageSyncView? {
+        let sync = model.subscriptionUsageSyncs[row.name]
+        return sync?.state == "connected" ? sync : nil
+    }
+
+    private func planFiveHourPercent(for row: ProfileRow) -> Double? {
+        liveSync(for: row)?.fiveHourPercent ?? row.planFiveHourPercent
+    }
+
+    private func planFiveHourResetAtMs(for row: ProfileRow) -> Int64? {
+        liveSync(for: row)?.fiveHourResetAtMs ?? row.planFiveHourResetAtMs
+    }
+
+    private func planWeeklyPercent(for row: ProfileRow) -> Double? {
+        liveSync(for: row)?.weeklyPercent ?? row.planWeeklyPercent
+    }
+
+    private func planWeeklyResetAtMs(for row: ProfileRow) -> Int64? {
+        liveSync(for: row)?.weeklyResetAtMs ?? row.planWeeklyResetAtMs
+    }
+
+    private func usageSourceSubtitle(for row: ProfileRow) -> String {
+        liveSync(for: row) == nil ? "Claude account usage" : "Live subscription usage"
+    }
+
+    private func extraUsageText(spend: Double, limit: Double) -> String {
+        String(format: "$%.2f of $%.2f extra usage", spend, limit)
     }
 }

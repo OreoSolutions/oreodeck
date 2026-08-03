@@ -5,8 +5,8 @@ readonly root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly brand_dir="$root_dir/assets/brand"
 readonly generated_dir="$brand_dir/generated"
 readonly resources_dir="$root_dir/packages/app/Resources"
-readonly mark_svg="$brand_dir/oreodeck-companion-mark.svg"
-readonly lockup_svg="$brand_dir/oreodeck-companion-lockup.svg"
+readonly mark_svg="$brand_dir/oreodeck-layered-bloom-mark.svg"
+readonly lockup_svg="$brand_dir/oreodeck-layered-bloom-lockup.svg"
 
 for tool in rsvg-convert magick iconutil; do
   command -v "$tool" >/dev/null || { echo "Missing required tool: $tool" >&2; exit 1; }
@@ -16,18 +16,16 @@ mkdir -p "$generated_dir"
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 
-transparent_mark="$generated_dir/oreodeck-mark-transparent-1024.png"
+mark_png="$generated_dir/oreodeck-mark-1024.png"
 app_png="$resources_dir/OreoDeck.png"
-background_png="$work_dir/charcoal-background.png"
 lockup_png="$work_dir/oreodeck-lockup.png"
 iconset_dir="$work_dir/OreoDeck.iconset"
 
-rsvg-convert "$mark_svg" --width 1024 --height 1024 --output "$transparent_mark"
-magick -size 1024x1024 xc:none -fill '#181614' -draw 'roundrectangle 24,24 1000,1000 232,232' "$background_png"
-magick "$background_png" "$transparent_mark" -gravity center -compose over -composite "$app_png"
+rsvg-convert "$mark_svg" --width 1024 --height 1024 --output "$mark_png"
+cp "$mark_png" "$app_png"
 
 rsvg-convert "$lockup_svg" --width 1024 --height 320 --output "$lockup_png"
-magick -size 1200x630 xc:'#181614' "$lockup_png" -gravity center -compose over -composite "$generated_dir/oreodeck-social-1200x630.png"
+magick -size 1200x630 xc:'#292321' "$lockup_png" -gravity center -compose over -composite "$generated_dir/oreodeck-social-1200x630.png"
 
 mkdir -p "$iconset_dir"
 render_icon() {
@@ -47,4 +45,4 @@ render_icon 512 icon_512x512.png
 render_icon 1024 icon_512x512@2x.png
 iconutil -c icns "$iconset_dir" -o "$resources_dir/OreoDeck.icns"
 
-echo "Generated Companion Deck brand assets."
+echo "Generated Layered Bloom brand assets."

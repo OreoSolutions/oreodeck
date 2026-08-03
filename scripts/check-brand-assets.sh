@@ -3,16 +3,17 @@ set -euo pipefail
 
 readonly app_png="packages/app/Resources/OreoDeck.png"
 readonly app_icns="packages/app/Resources/OreoDeck.icns"
-readonly transparent_mark="assets/brand/generated/oreodeck-mark-transparent-1024.png"
+readonly mark_png="assets/brand/generated/oreodeck-mark-1024.png"
 readonly social_image="assets/brand/generated/oreodeck-social-1200x630.png"
 
-for file in "$app_png" "$app_icns" "$transparent_mark" "$social_image"; do
+for file in "$app_png" "$app_icns" "$mark_png" "$social_image"; do
   test -f "$file"
 done
 
 test "$(sips -g pixelWidth -g pixelHeight "$app_png" | awk '/pixel/{print $2}' | tr '\n' ' ')" = "1024 1024 "
-test "$(magick identify -format '%wx%h' "$transparent_mark")" = "1024x1024"
+test "$(magick identify -format '%wx%h' "$mark_png")" = "1024x1024"
 test "$(magick identify -format '%wx%h' "$social_image")" = "1200x630"
+test "$(magick "$app_png" -format '%[pixel:p{0,0}]' info:)" = "srgb(246,232,223)"
 
 iconset_dir="$(mktemp -d)/OreoDeck.iconset"
 trap 'rm -rf "${iconset_dir%/OreoDeck.iconset}"' EXIT
@@ -26,7 +27,7 @@ for file in \
 done
 
 for readme in README.md README.vi.md README.zh-CN.md; do
-  rg -q 'assets/brand/generated/oreodeck-mark-transparent-1024.png' "$readme"
+  rg -q 'assets/brand/generated/oreodeck-mark-1024.png' "$readme"
   ! rg -q 'packages/app/Resources/OreoDeck.png' "$readme"
 done
 rg -q 'A companion for Claude Code' docs/brand/website-handoff.md

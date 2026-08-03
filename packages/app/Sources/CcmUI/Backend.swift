@@ -20,6 +20,9 @@ public protocol CcmBackend: Sendable {
     func updateGatewayModelMappings(name: String, modelMappings: GatewayModelMappings) throws
     func checkGatewayConnection(name: String) throws -> GatewayConnectionView
     func probeGatewayModels(baseUrl: String, key: String) throws -> GatewayModelIndexView
+    func getSubscriptionUsageSync(name: String) throws -> SubscriptionUsageSyncView
+    func getDirectSubscriptionUsageSyncEnabled() throws -> Bool
+    func setDirectSubscriptionUsageSyncEnabled(enabled: Bool) throws
     func removeProfile(name: String) throws
     func getFailover() throws -> FailoverView
     func setFailoverEnabled(on: Bool) throws
@@ -59,6 +62,15 @@ public struct LiveBackend: CcmBackend {
     }
     public func probeGatewayModels(baseUrl: String, key: String) throws -> GatewayModelIndexView {
         try CcmKit.probeGatewayModels(baseUrl: baseUrl, key: key)
+    }
+    public func getSubscriptionUsageSync(name: String) throws -> SubscriptionUsageSyncView {
+        try CcmKit.getSubscriptionUsageSync(name: name)
+    }
+    public func getDirectSubscriptionUsageSyncEnabled() throws -> Bool {
+        try CcmKit.getDirectSubscriptionUsageSyncEnabled()
+    }
+    public func setDirectSubscriptionUsageSyncEnabled(enabled: Bool) throws {
+        try CcmKit.setDirectSubscriptionUsageSyncEnabled(enabled: enabled)
     }
     public func removeProfile(name: String) throws { try CcmKit.removeProfile(name: name) }
     public func getFailover() throws -> FailoverView { try CcmKit.getFailover() }

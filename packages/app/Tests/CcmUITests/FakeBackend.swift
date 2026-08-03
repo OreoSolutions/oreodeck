@@ -15,6 +15,8 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     private var _listError: CcmError?
     private var _gatewayConnectionResults: [String: GatewayConnectionView] = [:]
     private var _gatewayModelIndex: GatewayModelIndexView?
+    private var _subscriptionUsageSyncResults: [String: SubscriptionUsageSyncView] = [:]
+    private var _directSubscriptionUsageSyncEnabled = false
 
     private(set) var listCallCount = 0
     private(set) var setActiveCalls: [String] = []
@@ -27,6 +29,8 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     private(set) var updateGatewayMappingCalls: [(name: String, modelMappings: GatewayModelMappings)] = []
     private(set) var checkGatewayConnectionCalls: [String] = []
     private(set) var probeGatewayModelsCalls: [String] = []
+    private(set) var getSubscriptionUsageSyncCalls: [String] = []
+    private(set) var setDirectSubscriptionUsageSyncEnabledCalls: [Bool] = []
     private(set) var setFailoverEnabledCalls: [Bool] = []
     private(set) var setFailoverOrderCalls: [[String]] = []
     private(set) var openConfigCallCount = 0
@@ -56,6 +60,12 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     }
     func set(gatewayModelIndex: GatewayModelIndexView) {
         lock.withLock { _gatewayModelIndex = gatewayModelIndex }
+    }
+    func set(subscriptionUsageSync: SubscriptionUsageSyncView, for name: String) {
+        lock.withLock { _subscriptionUsageSyncResults[name.lowercased()] = subscriptionUsageSync }
+    }
+    func set(directSubscriptionUsageSyncEnabled: Bool) {
+        lock.withLock { _directSubscriptionUsageSyncEnabled = directSubscriptionUsageSyncEnabled }
     }
 
     /// Appends a profile as if `ccm add <name>` had just finished a login in
@@ -134,6 +144,32 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
                 throw CcmError.Io(message: "Could not reach the gateway. Check its URL and network access.")
             }
             return _gatewayModelIndex
+        }
+    }
+    func getSubscriptionUsageSync(name: String) throws -> SubscriptionUsageSyncView {
+        lock.withLock {
+            getSubscriptionUsageSyncCalls.append(name)
+            return _subscriptionUsageSyncResults[name.lowercased()] ?? SubscriptionUsageSyncView(
+                state: "cannot-verify",
+                message: "OreoDeck could not refresh this profile’s live usage.",
+                fetchedAtMs: nil,
+                retryAfterMs: nil,
+                fiveHourPercent: nil,
+                fiveHourResetAtMs: nil,
+                weeklyPercent: nil,
+                weeklyResetAtMs: nil,
+                extraUsageSpendUsd: nil,
+                extraUsageLimitUsd: nil
+            )
+        }
+    }
+    func getDirectSubscriptionUsageSyncEnabled() throws -> Bool {
+        lock.withLock { _directSubscriptionUsageSyncEnabled }
+    }
+    func setDirectSubscriptionUsageSyncEnabled(enabled: Bool) throws {
+        lock.withLock {
+            setDirectSubscriptionUsageSyncEnabledCalls.append(enabled)
+            _directSubscriptionUsageSyncEnabled = enabled
         }
     }
     func removeProfile(name: String) throws {

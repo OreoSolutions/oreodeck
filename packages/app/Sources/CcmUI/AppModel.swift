@@ -42,6 +42,10 @@ public final class AppModel: ObservableObject {
     /// deliberately separate from profile loading: checking a gateway must not
     /// rewrite configuration, launch Claude, or block the dashboard refresh.
     @Published public private(set) var gatewayConnections: [String: GatewayConnectionView] = [:]
+    /// Display-safe result of the experimental direct subscription sync, keyed
+    /// by profile name. OAuth tokens never enter this model or SwiftUI.
+    @Published public private(set) var subscriptionUsageSyncs: [String: SubscriptionUsageSyncView] = [:]
+    @Published public private(set) var directSubscriptionUsageSyncEnabled = false
     /// Name of the subscription profile whose Terminal login we're polling for.
     @Published public private(set) var pendingSubscription: String?
     /// Refreshed on every load so countdowns re-render without their own clock.
@@ -55,6 +59,13 @@ public final class AppModel: ObservableObject {
     /// Monotonic generation: overlapping timer/action loads may finish out of
     /// order, but an older snapshot must never overwrite newer UI state.
     private var latestLoadID: UInt64 = 0
+    private var subscriptionUsageLastRequestMs: [String: Int64] = [:]
+    private var subscriptionUsageRetryAfterMs: [String: Int64] = [:]
+    private var subscriptionUsageInFlight: Set<String> = []
+    private var subscriptionUsageAuthStopped: Set<String> = []
+
+    private static let automaticSubscriptionUsageIntervalMs: Int64 = 120_000
+    private static let manualSubscriptionUsageIntervalMs: Int64 = 15_000
 
     public init(backend: CcmBackend) {
         self.backend = backend
@@ -95,14 +106,19 @@ public final class AppModel: ObservableObject {
                 let usage = try backend.getUsage()
                 let failover = try backend.getFailover()
                 let terminal = try backend.getTerminal()
-                return (cliInstalled, profiles, usage, failover, terminal)
+                let directSyncEnabled = try backend.getDirectSubscriptionUsageSyncEnabled()
+                return (cliInstalled, profiles, usage, failover, terminal, directSyncEnabled)
             }.value
             guard loadID == latestLoadID else { return }
             cliMissing = !result.0
             rows = mergeRows(profiles: result.1, usage: result.2)
             failover = result.3
             terminal = result.4
+            directSubscriptionUsageSyncEnabled = result.5
+            let availableProfiles = Set(rows.map { $0.name.lowercased() })
+            subscriptionUsageSyncs = subscriptionUsageSyncs.filter { availableProfiles.contains($0.key.lowercased()) }
             loadError = nil
+            await refreshEligibleSubscriptionUsage()
         } catch let error as CcmError {
             guard loadID == latestLoadID else { return }
             loadError = error
@@ -152,6 +168,114 @@ public final class AppModel: ObservableObject {
     public func openSession(name: String) async {
         let backend = self.backend
         await perform { try backend.openSession(name: name) }
+    }
+
+    /// Reopens the selected existing profile's CLI session. This is distinct
+    /// from adding a profile: the user completes `/login` in Terminal, then
+    /// chooses Refresh usage here.
+    public func loginAgain(name: String) async {
+        let backend = self.backend
+        do {
+            try await Task.detached { try backend.openSession(name: name) }.value
+            subscriptionUsageAuthStopped.remove(name.lowercased())
+            actionError = "Finish /login in Terminal, then refresh this profile’s usage."
+        } catch let error as CcmError {
+            actionError = message(for: error)
+        } catch {
+            actionError = "Terminal could not be opened."
+        }
+    }
+
+    /// Fetches one profile's display-safe subscription limits. `force` is for
+    /// an explicit user refresh; automatic refresh remains on the two-minute
+    /// cadence and never continues after a sign-in failure.
+    public func refreshSubscriptionUsage(name: String, force: Bool = false) async {
+        let key = name.lowercased()
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
+        let minimumInterval = force
+            ? Self.manualSubscriptionUsageIntervalMs
+            : Self.automaticSubscriptionUsageIntervalMs
+        guard !subscriptionUsageInFlight.contains(key),
+              force || directSubscriptionUsageSyncEnabled,
+              !(subscriptionUsageAuthStopped.contains(key) && !force)
+        else { return }
+        if let retryAfter = subscriptionUsageRetryAfterMs[key], now < retryAfter {
+            return
+        }
+        if let previousRequest = subscriptionUsageLastRequestMs[key],
+           now - previousRequest < minimumInterval {
+            return
+        }
+
+        subscriptionUsageInFlight.insert(key)
+        subscriptionUsageLastRequestMs[key] = now
+        subscriptionUsageSyncs[name] = SubscriptionUsageSyncView(
+            state: "checking",
+            message: "Checking live subscription usage…",
+            fetchedAtMs: subscriptionUsageSyncs[name]?.fetchedAtMs,
+            retryAfterMs: nil,
+            fiveHourPercent: subscriptionUsageSyncs[name]?.fiveHourPercent,
+            fiveHourResetAtMs: subscriptionUsageSyncs[name]?.fiveHourResetAtMs,
+            weeklyPercent: subscriptionUsageSyncs[name]?.weeklyPercent,
+            weeklyResetAtMs: subscriptionUsageSyncs[name]?.weeklyResetAtMs,
+            extraUsageSpendUsd: subscriptionUsageSyncs[name]?.extraUsageSpendUsd,
+            extraUsageLimitUsd: subscriptionUsageSyncs[name]?.extraUsageLimitUsd
+        )
+
+        let backend = self.backend
+        defer { subscriptionUsageInFlight.remove(key) }
+        do {
+            let result = try await Task.detached {
+                try backend.getSubscriptionUsageSync(name: name)
+            }.value
+            subscriptionUsageSyncs[name] = result
+            if result.state == "needs-sign-in" {
+                subscriptionUsageAuthStopped.insert(key)
+            }
+            if result.state == "rate-limited", let retryAfter = result.retryAfterMs {
+                subscriptionUsageRetryAfterMs[key] = retryAfter
+            } else {
+                subscriptionUsageRetryAfterMs.removeValue(forKey: key)
+            }
+        } catch {
+            subscriptionUsageSyncs[name] = SubscriptionUsageSyncView(
+                state: "cannot-verify",
+                message: "OreoDeck could not refresh this profile’s live usage.",
+                fetchedAtMs: nil,
+                retryAfterMs: nil,
+                fiveHourPercent: nil,
+                fiveHourResetAtMs: nil,
+                weeklyPercent: nil,
+                weeklyResetAtMs: nil,
+                extraUsageSpendUsd: nil,
+                extraUsageLimitUsd: nil
+            )
+        }
+    }
+
+    public func setDirectSubscriptionUsageSyncEnabled(_ enabled: Bool) async {
+        let backend = self.backend
+        do {
+            try await Task.detached {
+                try backend.setDirectSubscriptionUsageSyncEnabled(enabled: enabled)
+            }.value
+            directSubscriptionUsageSyncEnabled = enabled
+            actionError = nil
+            if enabled {
+                await refreshEligibleSubscriptionUsage()
+            }
+        } catch let error as CcmError {
+            actionError = message(for: error)
+        } catch {
+            actionError = "The direct subscription usage setting could not be saved."
+        }
+    }
+
+    private func refreshEligibleSubscriptionUsage() async {
+        guard directSubscriptionUsageSyncEnabled else { return }
+        for row in rows where row.kind == "subscription" {
+            await refreshSubscriptionUsage(name: row.name)
+        }
     }
 
     public func setTerminal(_ value: String) async {
