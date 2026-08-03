@@ -6,7 +6,7 @@
 [![macOS](https://img.shields.io/badge/macOS-15%2B-black.svg)](https://www.apple.com/macos/)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/nguyenhuyquang)
 
-<p align="center"><img src="packages/app/Resources/OreoDeck.png" alt="Logo OreoDeck" width="128"></p>
+<p align="center"><img src="assets/brand/generated/oreodeck-mark-transparent-1024.png" alt="Logo OreoDeck" width="128"></p>
 
 <p align="center">Ứng dụng macOS và CLI để quản lý nhiều profile Claude Code được cô lập.</p>
 

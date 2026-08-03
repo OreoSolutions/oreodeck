@@ -6,7 +6,7 @@
 [![macOS](https://img.shields.io/badge/macOS-15%2B-black.svg)](https://www.apple.com/macos/)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/nguyenhuyquang)
 
-<p align="center"><img src="packages/app/Resources/OreoDeck.png" alt="OreoDeck 标志" width="128"></p>
+<p align="center"><img src="assets/brand/generated/oreodeck-mark-transparent-1024.png" alt="OreoDeck 标志" width="128"></p>
 
 <p align="center">用于管理多个相互隔离的 Claude Code 配置档案的 macOS 应用和 CLI。</p>
 

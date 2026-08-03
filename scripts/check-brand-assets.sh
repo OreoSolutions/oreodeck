@@ -25,4 +25,10 @@ for file in \
   test -f "$iconset_dir/$file"
 done
 
+for readme in README.md README.vi.md README.zh-CN.md; do
+  rg -q 'assets/brand/generated/oreodeck-mark-transparent-1024.png' "$readme"
+  ! rg -q 'packages/app/Resources/OreoDeck.png' "$readme"
+done
+rg -q 'A companion for Claude Code' docs/brand/website-handoff.md
+
 echo "Brand asset contract passed."
