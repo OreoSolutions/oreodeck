@@ -110,6 +110,17 @@ pub struct GatewayConnectionView {
     pub message: String,
 }
 
+/// Display-safe model index for a draft gateway profile. It is intentionally
+/// transient: callers supply the draft URL and token, and this record never
+/// carries either secret back across the FFI boundary.
+#[derive(Debug, uniffi::Record)]
+pub struct GatewayModelIndexView {
+    pub state: String,
+    pub endpoint: String,
+    pub model_ids: Vec<String>,
+    pub message: String,
+}
+
 #[derive(Deserialize)]
 struct GatewayModelsResponse {
     data: Vec<GatewayModel>,
@@ -134,6 +145,34 @@ fn gateway_connection(
     }
 }
 
+fn gateway_model_index(
+    state: &str,
+    endpoint: &str,
+    model_ids: Vec<String>,
+    message: &str,
+) -> GatewayModelIndexView {
+    GatewayModelIndexView {
+        state: state.to_string(),
+        endpoint: endpoint.to_string(),
+        model_ids,
+        message: message.to_string(),
+    }
+}
+
+fn gateway_model_ids(body: &str) -> Result<Vec<String>, ()> {
+    let models = serde_json::from_str::<GatewayModelsResponse>(body).map_err(|_| ())?;
+    let mut ids = models
+        .data
+        .into_iter()
+        .map(|model| model.id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    ids.sort_unstable();
+    Ok(ids)
+}
+
 /// Turns an HTTP response into safe UI data. The body is parsed only for the
 /// `data[].id` shape advertised by OpenAI-compatible model endpoints; neither
 /// the body nor parser errors cross the FFI boundary.
@@ -143,15 +182,9 @@ fn gateway_connection_from_http_response(
     body: &str,
 ) -> GatewayConnectionView {
     match status {
-        200..=299 => match serde_json::from_str::<GatewayModelsResponse>(body) {
-            Ok(models) => {
-                let count = models
-                    .data
-                    .into_iter()
-                    .map(|model| model.id)
-                    .filter(|id| !id.trim().is_empty())
-                    .collect::<HashSet<_>>()
-                    .len() as u32;
+        200..=299 => match gateway_model_ids(body) {
+            Ok(model_ids) => {
+                let count = model_ids.len() as u32;
                 let noun = if count == 1 { "model" } else { "models" };
                 gateway_connection(
                     "connected",
@@ -182,11 +215,65 @@ fn gateway_connection_from_http_response(
     }
 }
 
+fn gateway_model_index_from_http_response(
+    endpoint: &str,
+    status: u16,
+    body: &str,
+) -> GatewayModelIndexView {
+    match status {
+        200..=299 => match gateway_model_ids(body) {
+            Ok(model_ids) if !model_ids.is_empty() => {
+                let count = model_ids.len();
+                let noun = if count == 1 { "model" } else { "models" };
+                gateway_model_index(
+                    "connected",
+                    endpoint,
+                    model_ids,
+                    &format!("Connected — {count} {noun} available."),
+                )
+            }
+            Ok(_) => gateway_model_index(
+                "connected",
+                endpoint,
+                vec![],
+                "Connected — the gateway did not advertise any models.",
+            ),
+            Err(_) => gateway_model_index(
+                "unexpected-response",
+                endpoint,
+                vec![],
+                "The gateway returned an unexpected model list.",
+            ),
+        },
+        401 | 403 => gateway_model_index(
+            "unauthorized",
+            endpoint,
+            vec![],
+            "The gateway rejected this profile's API key.",
+        ),
+        _ => gateway_model_index(
+            "unexpected-response",
+            endpoint,
+            vec![],
+            "The gateway returned an unexpected response.",
+        ),
+    }
+}
+
 fn gateway_connection_transport_failure(endpoint: &str) -> GatewayConnectionView {
     gateway_connection(
         "unreachable",
         endpoint,
         0,
+        "Could not reach the gateway. Check its URL and network access.",
+    )
+}
+
+fn gateway_model_index_transport_failure(endpoint: &str) -> GatewayModelIndexView {
+    gateway_model_index(
+        "unreachable",
+        endpoint,
+        vec![],
         "Could not reach the gateway. Check its URL and network access.",
     )
 }
@@ -211,6 +298,20 @@ where
     match get(endpoint, token) {
         Ok((status, body)) => gateway_connection_from_http_response(endpoint, status, &body),
         Err(()) => gateway_connection_transport_failure(endpoint),
+    }
+}
+
+fn probe_gateway_models_with<F>(
+    endpoint: &str,
+    token: &str,
+    get: F,
+) -> GatewayModelIndexView
+where
+    F: FnOnce(&str, Option<&str>) -> Result<(u16, String), ()>,
+{
+    match get(endpoint, Some(token)) {
+        Ok((status, body)) => gateway_model_index_from_http_response(endpoint, status, &body),
+        Err(()) => gateway_model_index_transport_failure(endpoint),
     }
 }
 
@@ -426,6 +527,19 @@ pub fn check_gateway_connection(name: String) -> Result<GatewayConnectionView, C
         token.as_deref(),
         request_gateway_models,
     ))
+}
+
+/// Lists a draft gateway's advertised model IDs without writing a profile or
+/// storing the supplied token. The result contains only display-safe metadata.
+#[uniffi::export]
+pub fn probe_gateway_models(
+    base_url: String,
+    key: String,
+) -> Result<GatewayModelIndexView, CcmError> {
+    let endpoint = gateway_models_endpoint(&base_url).ok_or_else(|| CcmError::Io {
+        message: "This gateway profile has an invalid URL.".to_string(),
+    })?;
+    Ok(probe_gateway_models_with(&endpoint, &key, request_gateway_models))
 }
 
 /// Testable core of `remove_profile`. Resolves the CANONICAL stored name
@@ -866,6 +980,36 @@ mod tests {
         assert_eq!(result.endpoint, "https://gateway.example.com/v1/models");
         assert_eq!(result.model_count, 2);
         assert_eq!(result.message, "Connected — 2 models available.");
+    }
+
+    // The add-gateway sheet needs the actual IDs to populate its selector.
+    // Sorting and de-duplication make the choice list deterministic and never
+    // expose blank provider records.
+    #[test]
+    fn gateway_model_index_returns_sorted_distinct_advertised_ids() {
+        let result = gateway_model_index_from_http_response(
+            "https://gateway.example.com/v1/models",
+            200,
+            r#"{"data":[{"id":"cx/sonnet"},{"id":""},{"id":"cx/opus"},{"id":"cx/sonnet"}]}"#,
+        );
+
+        assert_eq!(result.state, "connected");
+        assert_eq!(result.endpoint, "https://gateway.example.com/v1/models");
+        assert_eq!(result.model_ids, vec!["cx/opus", "cx/sonnet"]);
+        assert!(!format!("{result:?}").contains("sk-ant-supersecret"));
+    }
+
+    #[test]
+    fn gateway_model_index_hides_ids_when_gateway_rejects_the_token() {
+        let result = gateway_model_index_from_http_response(
+            "https://gateway.example.com/v1/models",
+            401,
+            "ignored",
+        );
+
+        assert_eq!(result.state, "unauthorized");
+        assert!(result.model_ids.is_empty());
+        assert!(!format!("{result:?}").contains("sk-ant-supersecret"));
     }
 
     // An authentication rejection is actionable and fundamentally different
