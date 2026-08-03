@@ -38,6 +38,26 @@ import Testing
 }
 
 @MainActor
+@Test func draftGatewayProbePublishesOnlyDisplaySafeModelIDs() async throws {
+    let backend = FakeBackend()
+    backend.set(gatewayModelIndex: GatewayModelIndexView(
+        state: "connected",
+        endpoint: "https://gateway.example.com/v1/models",
+        modelIds: ["cx/opus", "cx/sonnet"],
+        message: "Connected — 2 models available."
+    ))
+    let model = AppModel(backend: backend)
+
+    let result = try #require(await model.probeGatewayModels(
+        baseUrl: "https://gateway.example.com/v1",
+        key: "sk-ant-supersecret"
+    ))
+
+    #expect(result.modelIds == ["cx/opus", "cx/sonnet"])
+    #expect(!result.message.contains("sk-ant-supersecret"))
+}
+
+@MainActor
 @Test func loadPopulatesRowsFailoverAndCliStatus() async {
     let backend = FakeBackend()
     backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)])

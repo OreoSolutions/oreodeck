@@ -14,6 +14,7 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     private var _terminal = "terminal"
     private var _listError: CcmError?
     private var _gatewayConnectionResults: [String: GatewayConnectionView] = [:]
+    private var _gatewayModelIndex: GatewayModelIndexView?
 
     private(set) var listCallCount = 0
     private(set) var setActiveCalls: [String] = []
@@ -25,6 +26,7 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     private(set) var addGatewayCalls: [(name: String, baseUrl: String, key: String, modelMappings: GatewayModelMappings)] = []
     private(set) var updateGatewayMappingCalls: [(name: String, modelMappings: GatewayModelMappings)] = []
     private(set) var checkGatewayConnectionCalls: [String] = []
+    private(set) var probeGatewayModelsCalls: [String] = []
     private(set) var setFailoverEnabledCalls: [Bool] = []
     private(set) var setFailoverOrderCalls: [[String]] = []
     private(set) var openConfigCallCount = 0
@@ -51,6 +53,9 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     func set(listError: CcmError?) { lock.withLock { _listError = listError } }
     func set(gatewayConnection: GatewayConnectionView, for name: String) {
         lock.withLock { _gatewayConnectionResults[name.lowercased()] = gatewayConnection }
+    }
+    func set(gatewayModelIndex: GatewayModelIndexView) {
+        lock.withLock { _gatewayModelIndex = gatewayModelIndex }
     }
 
     /// Appends a profile as if `ccm add <name>` had just finished a login in
@@ -120,6 +125,15 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
                 modelCount: 0,
                 message: "Could not reach the gateway. Check its URL and network access."
             )
+        }
+    }
+    func probeGatewayModels(baseUrl: String, key: String) throws -> GatewayModelIndexView {
+        try lock.withLock {
+            probeGatewayModelsCalls.append(baseUrl)
+            guard let _gatewayModelIndex else {
+                throw CcmError.Io(message: "Could not reach the gateway. Check its URL and network access.")
+            }
+            return _gatewayModelIndex
         }
     }
     func removeProfile(name: String) throws {

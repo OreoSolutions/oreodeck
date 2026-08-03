@@ -222,6 +222,20 @@ public final class AppModel: ObservableObject {
         await perform { try backend.updateGatewayModelMappings(name: name, modelMappings: modelMappings) }
     }
 
+    /// Reads only display-safe model IDs for an unsaved gateway draft. The key
+    /// is captured by this one detached request and never assigned to model
+    /// state, configuration, or Keychain until the user explicitly adds it.
+    public func probeGatewayModels(baseUrl: String, key: String) async -> GatewayModelIndexView? {
+        let backend = self.backend
+        do {
+            return try await Task.detached {
+                try backend.probeGatewayModels(baseUrl: baseUrl, key: key)
+            }.value
+        } catch {
+            return nil
+        }
+    }
+
     /// Probes only the selected gateway's model index. The backend keeps the
     /// Keychain token inside the Rust core and returns display-safe state; an
     /// unexpected backend failure is intentionally collapsed to the same safe
