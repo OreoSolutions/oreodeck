@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 enum OreoTheme {
@@ -10,6 +11,33 @@ enum OreoTheme {
     static let sand = Color(red: 0.91, green: 0.83, blue: 0.72)
     static let cyan = Color(red: 0.10, green: 0.72, blue: 0.92)
     static let chocolate = charcoal
+}
+
+/// The bundled Layered Bloom mark, with a graceful fallback for preview and test hosts.
+struct OreoBrandMark: View {
+    var size: CGFloat = 34
+
+    var body: some View {
+        Group {
+            if let url = Bundle.main.url(forResource: "OreoDeck", withExtension: "png"),
+               let logo = NSImage(contentsOf: url) {
+                Image(nsImage: logo)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+            } else {
+                ZStack {
+                    RoundedRectangle(cornerRadius: size * 0.28).fill(OreoTheme.terracotta)
+                    Image(systemName: "rectangle.stack.fill")
+                        .font(.system(size: size * 0.46, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
+        .accessibilityLabel("OreoDeck logo")
+    }
 }
 
 struct OreoCard<Content: View>: View {

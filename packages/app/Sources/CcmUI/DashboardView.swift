@@ -32,13 +32,7 @@ public struct DashboardView: View {
         HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 10) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 11).fill(OreoTheme.terracotta)
-                        Image(systemName: "rectangle.stack.fill")
-                            .font(.title3)
-                            .foregroundStyle(.white)
-                    }
-                    .frame(width: 34, height: 34)
+                    OreoBrandMark()
 
                     VStack(alignment: .leading, spacing: 1) {
                         Text("OreoDeck").font(.headline).foregroundStyle(.white)
@@ -119,20 +113,21 @@ public struct DashboardView: View {
                 .accessibilityLabel("OreoDeck v\(model.currentVersion), \(updateStatusText). Open update settings")
                 .help("Open update settings")
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("System status")
+                HStack(spacing: 8) {
+                    Image(systemName: model.cliMissing ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        .foregroundStyle(model.cliMissing ? .orange : .green)
+                    Text(model.cliMissing ? "CLI setup needed" : "CLI connected")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    OreoStatusRow(
-                        title: model.cliMissing ? "CLI needs setup" : "CLI connected",
-                        detail: model.cliMissing ? "Install ord to launch sessions" : "Ready to open sessions",
-                        color: model.cliMissing ? .orange : .green,
-                        systemImage: model.cliMissing ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"
-                    )
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
                 }
-                .padding(10)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(OreoTheme.card.opacity(0.72), in: RoundedRectangle(cornerRadius: 12))
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(model.cliMissing ? "CLI setup needed. Install ord to launch sessions." : "CLI connected. Ready to open sessions.")
+                .help(model.cliMissing ? "Install ord to launch sessions" : "Ready to open sessions")
             }
             .padding(14)
             .frame(width: 210)
