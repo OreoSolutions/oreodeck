@@ -301,11 +301,7 @@ where
     }
 }
 
-fn probe_gateway_models_with<F>(
-    endpoint: &str,
-    token: &str,
-    get: F,
-) -> GatewayModelIndexView
+fn probe_gateway_models_with<F>(endpoint: &str, token: &str, get: F) -> GatewayModelIndexView
 where
     F: FnOnce(&str, Option<&str>) -> Result<(u16, String), ()>,
 {
@@ -539,7 +535,11 @@ pub fn probe_gateway_models(
     let endpoint = gateway_models_endpoint(&base_url).ok_or_else(|| CcmError::Io {
         message: "This gateway profile has an invalid URL.".to_string(),
     })?;
-    Ok(probe_gateway_models_with(&endpoint, &key, request_gateway_models))
+    Ok(probe_gateway_models_with(
+        &endpoint,
+        &key,
+        request_gateway_models,
+    ))
 }
 
 /// Testable core of `remove_profile`. Resolves the CANONICAL stored name
