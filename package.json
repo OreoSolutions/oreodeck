@@ -1,6 +1,6 @@
 {
   "name": "oreodeck",
-  "version": "0.1.10",
+  "version": "1.0.0",
   "description": "Manage multiple isolated Claude Code profiles on macOS",
   "license": "Apache-2.0",
   "homepage": "https://oreodeck.vercel.app",

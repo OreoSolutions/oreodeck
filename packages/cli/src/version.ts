@@ -1,2 +1,2 @@
-export const OREODECK_VERSION = "0.1.10";
+export const OREODECK_VERSION = "1.0.0";
 export const OREODECK_REPOSITORY = "OreoSolutions/oreodeck";
