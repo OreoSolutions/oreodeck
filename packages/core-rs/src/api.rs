@@ -38,6 +38,9 @@ impl From<store::StoreError> for CcmError {
             store::StoreError::Io(_) => CcmError::Io { message },
             store::StoreError::SharedResource(_) => CcmError::Io { message },
             store::StoreError::InvalidTerminal(_) => CcmError::Io { message },
+            store::StoreError::InvalidSubscriptionUsageRefreshInterval(_) => {
+                CcmError::Io { message }
+            }
             store::StoreError::InvalidGatewayBaseUrl(_) => CcmError::Io { message },
             store::StoreError::InvalidGatewayModelMappings(_) => CcmError::Io { message },
         }
@@ -437,8 +440,12 @@ pub fn get_usage() -> Result<Vec<ProfileUsageView>, CcmError> {
 #[uniffi::export]
 pub fn get_subscription_usage_sync(
     name: String,
+    allow_keychain_prompt: bool,
 ) -> Result<subscription_usage::SubscriptionUsageSyncView, CcmError> {
-    Ok(subscription_usage::get_subscription_usage_sync(&name)?)
+    Ok(subscription_usage::get_subscription_usage_sync(
+        &name,
+        allow_keychain_prompt,
+    )?)
 }
 
 #[uniffi::export]
@@ -449,6 +456,18 @@ pub fn get_direct_subscription_usage_sync_enabled() -> Result<bool, CcmError> {
 #[uniffi::export]
 pub fn set_direct_subscription_usage_sync_enabled(enabled: bool) -> Result<(), CcmError> {
     Ok(store::set_direct_subscription_usage_sync_enabled(enabled)?)
+}
+
+#[uniffi::export]
+pub fn get_direct_subscription_usage_refresh_interval_seconds() -> Result<u32, CcmError> {
+    Ok(store::direct_subscription_usage_refresh_interval_seconds()?)
+}
+
+#[uniffi::export]
+pub fn set_direct_subscription_usage_refresh_interval_seconds(
+    seconds: u32,
+) -> Result<(), CcmError> {
+    Ok(store::set_direct_subscription_usage_refresh_interval_seconds(seconds)?)
 }
 
 #[uniffi::export]

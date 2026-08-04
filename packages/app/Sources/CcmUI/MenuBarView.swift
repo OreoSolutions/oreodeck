@@ -44,24 +44,11 @@ public struct MenuBarView: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 13)
-                        .fill(
-                            LinearGradient(
-                                colors: [OreoTheme.chocolate, OreoTheme.chocolate.opacity(0.78)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                    Image(systemName: "circle.grid.3x3.fill")
-                        .font(.title3)
-                        .foregroundStyle(OreoTheme.cream)
-                }
-                .frame(width: 46, height: 46)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                OreoBrandMark(size: 40)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("OreoDeck").font(.title3.weight(.bold))
+                    Text("OreoDeck").font(.headline.weight(.bold))
                     HStack(spacing: 6) {
                         Circle()
                             .fill(model.loadError == nil ? OreoTheme.cyan : Color.orange)
@@ -104,6 +91,10 @@ public struct MenuBarView: View {
             } else {
                 VStack(spacing: 7) {
                     ForEach(model.rows) { row in
+                        let subscriptionUsage = SubscriptionUsageDisplay(
+                            row: row,
+                            sync: model.subscriptionUsageSyncs[row.name]
+                        )
                         HStack(spacing: 10) {
                             ZStack {
                                 Circle().fill(row.active ? OreoTheme.cyan.opacity(0.16) : Color.secondary.opacity(0.1))
@@ -117,9 +108,12 @@ public struct MenuBarView: View {
                                 HStack(spacing: 6) {
                                     Text(row.name).font(.callout.weight(.semibold))
                                     if row.active { StatusPill(text: "Active", color: OreoTheme.cyan) }
+                                    if row.kind == "subscription", subscriptionUsage.isLive {
+                                        StatusPill(text: "Live", color: .green)
+                                    }
                                 }
                                 Text(row.kind == "subscription"
-                                    ? "\(row.planFiveHourPercent.map { "\(Int($0.rounded()))% used" } ?? "Usage unavailable") · resets \(formatCountdown(resetAtMs: row.planFiveHourResetAtMs, nowMs: model.nowMs))"
+                                    ? compactSubscriptionUsage(subscriptionUsage)
                                     : "\(formatTokens(row.totalTokens)) local tokens · \(row.kind == "gateway" ? "Gateway" : "API") billing")
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
@@ -133,8 +127,9 @@ public struct MenuBarView: View {
                             .buttonStyle(.borderless)
                             .help("Open a Claude session in Terminal with this profile")
                         }
-                        .padding(9)
-                        .background(Color.primary.opacity(0.045), in: RoundedRectangle(cornerRadius: 11))
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 7)
+                        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
                     }
                 }
             }
@@ -168,7 +163,7 @@ public struct MenuBarView: View {
                 .buttonStyle(.plain)
             }
 
-            VStack(spacing: 8) {
+            VStack(spacing: 5) {
                 Button(action: openDashboard) {
                     HStack {
                         Image(systemName: "rectangle.grid.2x2")
@@ -177,27 +172,29 @@ public struct MenuBarView: View {
                         Image(systemName: "arrow.up.right")
                     }
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(OreoTheme.cream)
-                    .padding(.horizontal, 13)
-                    .padding(.vertical, 10)
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 8)
                     .frame(maxWidth: .infinity)
-                    .background(OreoTheme.chocolate, in: RoundedRectangle(cornerRadius: 10))
+                    .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
                 }
                 .buttonStyle(.plain)
 
                 Button {
                     NSApplication.shared.terminate(nil)
                 } label: {
-                    Label("Quit OreoDeck", systemImage: "power")
-                        .frame(maxWidth: .infinity)
+                    Text("Quit OreoDeck")
+                        .font(.caption)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 2)
             }
         }
-        .padding(16)
-        .frame(width: 350)
+        .padding(14)
+        .frame(width: 320)
+        .background(OreoTheme.sidebar)
         // Resolves the popover's own NSWindow so PopoverCloseObserver can
         // scope its notification filter to it (Finding 2 of the Task 2
         // review) instead of reacting to ANY window resigning key.
@@ -240,6 +237,12 @@ public struct MenuBarView: View {
         if model.loadError != nil { return "Needs attention" }
         if model.rows.isEmpty { return "Ready to set up" }
         return "\(model.rows.count) profile\(model.rows.count == 1 ? "" : "s") ready"
+    }
+
+    private func compactSubscriptionUsage(_ usage: SubscriptionUsageDisplay) -> String {
+        let fiveHour = usage.fiveHourPercent.map { "\(Int($0.rounded()))%" } ?? "—"
+        let weekly = usage.weeklyPercent.map { "\(Int($0.rounded()))%" } ?? "—"
+        return "5h \(fiveHour) · Week \(weekly)"
     }
 
     private func callout(icon: String, title: String, message: String, color: Color) -> some View {

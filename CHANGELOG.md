@@ -9,6 +9,12 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Added live Claude OAuth subscription usage refresh, with per-profile login
+  state, safe re-authentication, configurable refresh intervals, and a
+  non-interactive background refresh that never prompts for Keychain access.
+- Subscription usage now renders every limit returned by Claude, including
+  five-hour, weekly, Fable-specific, and Usage credits limits with their reset
+  times.
 - Added isolated Anthropic-compatible gateway profiles. Each profile stores its
   HTTPS gateway URL in config and its token only in macOS Keychain.
 - Gateway profiles can optionally map Claude Code's Opus, Sonnet, Haiku, and
@@ -23,6 +29,15 @@ and uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   charcoal-and-terracotta sidebar, consistent task cards, profile detail and
   model-alias views, a current-profile Usage summary, an explicit Failover
   state, grouped CLI tools, and easier-to-scan Settings.
+- Consolidated current-profile usage across the dashboard, profile detail, and
+  menu bar so subscription and gateway states use the same live data.
+
+### Fixed
+
+- Correctly identify Claude's unscoped `weekly_scoped` limit as the Fable
+  weekly limit instead of exposing the raw API label.
+- Removed subscription-usage diagnostic file logging; refreshes no longer
+  create `~/.oreodeck/logs/subscription-usage.log`.
 
 ## [0.1.10] - 2026-08-03
 

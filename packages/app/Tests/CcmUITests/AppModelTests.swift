@@ -17,15 +17,30 @@ import Testing
         weeklyPercent: 12,
         weeklyResetAtMs: nil,
         extraUsageSpendUsd: nil,
-        extraUsageLimitUsd: nil
+        extraUsageLimitUsd: nil,
+        limits: []
     ), for: "work")
     let model = AppModel(backend: backend)
 
     await model.refreshSubscriptionUsage(name: "work", force: true)
 
-    #expect(backend.getSubscriptionUsageSyncCalls == ["work"])
+    #expect(backend.getSubscriptionUsageSyncCalls.map(\.name) == ["work"])
+    #expect(backend.getSubscriptionUsageSyncCalls.map(\.allowKeychainPrompt) == [true])
     #expect(model.subscriptionUsageSyncs["work"]?.state == "connected")
     #expect(model.subscriptionUsageSyncs["other"] == nil)
+}
+
+@MainActor
+@Test func automaticSubscriptionRefreshNeverRequestsKeychainInteraction() async {
+    let backend = FakeBackend()
+    backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)])
+    backend.set(directSubscriptionUsageSyncEnabled: true)
+    let model = AppModel(backend: backend)
+
+    await model.load()
+
+    #expect(backend.getSubscriptionUsageSyncCalls.map(\.name) == ["work"])
+    #expect(backend.getSubscriptionUsageSyncCalls.map(\.allowKeychainPrompt) == [false])
 }
 
 @MainActor
@@ -52,15 +67,29 @@ import Testing
         weeklyPercent: nil,
         weeklyResetAtMs: nil,
         extraUsageSpendUsd: nil,
-        extraUsageLimitUsd: nil
+        extraUsageLimitUsd: nil,
+        limits: []
     ), for: "work")
     let model = AppModel(backend: backend)
 
     await model.refreshSubscriptionUsage(name: "work", force: true)
     await model.refreshSubscriptionUsage(name: "work", force: true)
 
-    #expect(backend.getSubscriptionUsageSyncCalls == ["work"])
+    #expect(backend.getSubscriptionUsageSyncCalls.map(\.name) == ["work"])
     #expect(model.subscriptionUsageSyncs["work"]?.state == "rate-limited")
+}
+
+@MainActor
+@Test func subscriptionUsageRefreshIntervalLoadsAndPersistsThroughTheBackend() async {
+    let backend = FakeBackend()
+    backend.set(directSubscriptionUsageRefreshIntervalSeconds: 600)
+    let model = AppModel(backend: backend)
+
+    await model.load()
+    await model.setDirectSubscriptionUsageRefreshIntervalSeconds(1_800)
+
+    #expect(model.directSubscriptionUsageRefreshIntervalSeconds == 1_800)
+    #expect(backend.setDirectSubscriptionUsageRefreshIntervalSecondsCalls == [1_800])
 }
 
 @MainActor

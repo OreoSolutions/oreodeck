@@ -64,33 +64,6 @@ public struct UsageBar: View {
     }
 }
 
-private struct PlanUsageBar: View {
-    let label: String
-    let percent: Double?
-    let resetAtMs: Int64?
-    let nowMs: Int64
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(label).font(.subheadline.weight(.semibold))
-                Spacer()
-                if let percent {
-                    Text("\(Int(percent.rounded()))% used")
-                        .monospacedDigit()
-                } else {
-                    Text("Not available").foregroundStyle(.secondary)
-                }
-                Text("resets in \(formatCountdown(resetAtMs: resetAtMs, nowMs: nowMs))")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-            ProgressView(value: min(max(percent ?? 0, 0), 100), total: 100)
-                .tint((percent ?? 0) >= 90 ? .red : (percent ?? 0) >= 70 ? .orange : .accentColor)
-        }
-    }
-}
-
 public struct UsageTab: View {
     @ObservedObject private var model: AppModel
 
@@ -118,11 +91,22 @@ public struct UsageTab: View {
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
-                            StatusPill(
-                                text: planFiveHourPercent(for: active).map { "\(Int($0.rounded()))% used" } ?? "Ready",
-                                color: planFiveHourPercent(for: active) ?? 0 >= 90 ? .red : OreoTheme.terracotta
-                            )
+                            if active.kind == "subscription" {
+                                StatusPill(
+                                    text: subscriptionUsageDisplay(for: active).fiveHourPercent.map { "\(Int($0.rounded()))% used" } ?? "Ready",
+                                    color: subscriptionUsageDisplay(for: active).fiveHourPercent ?? 0 >= 90 ? .red : OreoTheme.terracotta
+                                )
+                            } else {
+                                HStack(spacing: 10) {
+                                    Text("\(formatTokens(active.totalTokens)) local tokens")
+                                        .monospacedDigit()
+                                    Text(usageCost(active))
+                                        .monospacedDigit()
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
+                        profileUsageDetail(for: active)
                     }
                 }
                 if let loadError = model.loadError {
@@ -141,23 +125,16 @@ public struct UsageTab: View {
                         systemImage: "chart.bar",
                     )
                 } else {
-                    ForEach(model.rows) { row in
-                        OreoSectionCard(row.name, subtitle: row.active ? "Active profile" : "Profile usage") {
+                    ForEach(model.rows.filter { !$0.active }) { row in
+                        OreoSectionCard(row.name, subtitle: "Profile usage") {
                             HStack {
                                 Text(row.name).font(.headline)
-                                if row.active {
-                                    Text("active")
-                                        .font(.caption)
-                                        .padding(.horizontal, 6)
-                                        .padding(.vertical, 1)
-                                        .background(Color.accentColor.opacity(0.2))
-                                        .clipShape(Capsule())
-                                }
                                 Spacer()
                                 if row.kind == "api-key" || row.kind == "gateway" {
+                                    let cost = usageCost(row)
                                     Text("\(formatTokens(row.totalTokens)) local tokens")
                                         .monospacedDigit()
-                                    Text(formatCost(kind: row.kind, costUsd: row.costUsd))
+                                    Text(cost)
                                         .monospacedDigit()
                                         .foregroundStyle(.secondary)
                                 } else if let fetchedAt = row.planUsageFetchedAtMs {
@@ -166,42 +143,7 @@ public struct UsageTab: View {
                                         .foregroundStyle(.secondary)
                                 }
                             }
-                            if row.kind == "subscription" {
-                                SubscriptionUsageSyncStatus(
-                                    sync: model.subscriptionUsageSyncs[row.name],
-                                    enabled: model.directSubscriptionUsageSyncEnabled,
-                                    nowMs: model.nowMs,
-                                    refresh: { Task { await model.refreshSubscriptionUsage(name: row.name, force: true) } },
-                                    loginAgain: { Task { await model.loginAgain(name: row.name) } }
-                                )
-                                PlanUsageBar(
-                                    label: "5-hour session",
-                                    percent: planFiveHourPercent(for: row),
-                                    resetAtMs: planFiveHourResetAtMs(for: row),
-                                    nowMs: model.nowMs
-                                )
-                                PlanUsageBar(
-                                    label: "Weekly",
-                                    percent: planWeeklyPercent(for: row),
-                                    resetAtMs: planWeeklyResetAtMs(for: row),
-                                    nowMs: model.nowMs
-                                )
-                                if let extraUsage = liveSync(for: row),
-                                   let spend = extraUsage.extraUsageSpendUsd,
-                                   let limit = extraUsage.extraUsageLimitUsd {
-                                    Text(extraUsageText(spend: spend, limit: limit))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .monospacedDigit()
-                                }
-                                if model.subscriptionUsageSyncs[row.name]?.state != "connected", row.planUsageFetchedAtMs == nil {
-                                    Text("No Claude usage cache yet. Open this profile in Claude and run /usage.")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            } else {
-                                UsageBar(row: row)
-                            }
+                            profileUsageDetail(for: row)
                         }
                     }
                 }
@@ -217,32 +159,48 @@ public struct UsageTab: View {
         .onReceive(timer) { _ in Task { await model.tick() } }
     }
 
-    private func liveSync(for row: ProfileRow) -> SubscriptionUsageSyncView? {
-        let sync = model.subscriptionUsageSyncs[row.name]
-        return sync?.state == "connected" ? sync : nil
-    }
-
-    private func planFiveHourPercent(for row: ProfileRow) -> Double? {
-        liveSync(for: row)?.fiveHourPercent ?? row.planFiveHourPercent
-    }
-
-    private func planFiveHourResetAtMs(for row: ProfileRow) -> Int64? {
-        liveSync(for: row)?.fiveHourResetAtMs ?? row.planFiveHourResetAtMs
-    }
-
-    private func planWeeklyPercent(for row: ProfileRow) -> Double? {
-        liveSync(for: row)?.weeklyPercent ?? row.planWeeklyPercent
-    }
-
-    private func planWeeklyResetAtMs(for row: ProfileRow) -> Int64? {
-        liveSync(for: row)?.weeklyResetAtMs ?? row.planWeeklyResetAtMs
+    private func subscriptionUsageDisplay(for row: ProfileRow) -> SubscriptionUsageDisplay {
+        SubscriptionUsageDisplay(row: row, sync: model.subscriptionUsageSyncs[row.name])
     }
 
     private func usageSourceSubtitle(for row: ProfileRow) -> String {
-        liveSync(for: row) == nil ? "Claude account usage" : "Live subscription usage"
+        subscriptionUsageDisplay(for: row).isLive ? "Live subscription usage" : "Claude account usage"
+    }
+
+    @ViewBuilder
+    private func profileUsageDetail(for row: ProfileRow) -> some View {
+        if row.kind == "subscription" {
+            SubscriptionUsageSyncStatus(
+                row: row,
+                sync: model.subscriptionUsageSyncs[row.name],
+                nowMs: model.nowMs,
+                refresh: { Task { await model.refreshSubscriptionUsage(name: row.name, force: true) } },
+                loginAgain: { Task { await model.loginAgain(name: row.name) } }
+            )
+            if let extraUsage = model.subscriptionUsageSyncs[row.name],
+               extraUsage.state == "connected",
+               let spend = extraUsage.extraUsageSpendUsd,
+               let limit = extraUsage.extraUsageLimitUsd {
+                Text(extraUsageText(spend: spend, limit: limit))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            if model.subscriptionUsageSyncs[row.name]?.state != "connected", row.planUsageFetchedAtMs == nil {
+                Text("No live usage yet. Refresh to connect through Claude OAuth.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } else {
+            UsageBar(row: row)
+        }
     }
 
     private func extraUsageText(spend: Double, limit: Double) -> String {
         String(format: "$%.2f of $%.2f extra usage", spend, limit)
+    }
+
+    private func usageCost(_ row: ProfileRow) -> String {
+        formatCost(kind: row.kind, costUsd: row.costUsd)
     }
 }

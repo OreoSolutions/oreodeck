@@ -10,10 +10,10 @@ import ViewInspector
 }
 
 @MainActor
-@Test func settingsViewExplainsTheExperimentalDirectSubscriptionSync() throws {
+@Test func settingsViewExplainsLiveClaudeOAuthSubscriptionUsage() throws {
     let view = SettingsView(model: AppModel(backend: FakeBackend()))
     #expect(try view.inspect().find(text: "Live subscription usage").string() == "Live subscription usage")
-    #expect(try view.inspect().find(text: "Experimental").string() == "Experimental")
+    #expect(try view.inspect().find(text: "Claude OAuth").string() == "Claude OAuth")
 }
 
 @MainActor

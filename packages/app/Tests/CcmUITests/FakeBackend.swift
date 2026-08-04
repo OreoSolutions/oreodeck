@@ -17,6 +17,7 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     private var _gatewayModelIndex: GatewayModelIndexView?
     private var _subscriptionUsageSyncResults: [String: SubscriptionUsageSyncView] = [:]
     private var _directSubscriptionUsageSyncEnabled = false
+    private var _directSubscriptionUsageRefreshIntervalSeconds: UInt32 = 120
 
     private(set) var listCallCount = 0
     private(set) var setActiveCalls: [String] = []
@@ -29,8 +30,9 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     private(set) var updateGatewayMappingCalls: [(name: String, modelMappings: GatewayModelMappings)] = []
     private(set) var checkGatewayConnectionCalls: [String] = []
     private(set) var probeGatewayModelsCalls: [String] = []
-    private(set) var getSubscriptionUsageSyncCalls: [String] = []
+    private(set) var getSubscriptionUsageSyncCalls: [(name: String, allowKeychainPrompt: Bool)] = []
     private(set) var setDirectSubscriptionUsageSyncEnabledCalls: [Bool] = []
+    private(set) var setDirectSubscriptionUsageRefreshIntervalSecondsCalls: [UInt32] = []
     private(set) var setFailoverEnabledCalls: [Bool] = []
     private(set) var setFailoverOrderCalls: [[String]] = []
     private(set) var openConfigCallCount = 0
@@ -66,6 +68,9 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
     }
     func set(directSubscriptionUsageSyncEnabled: Bool) {
         lock.withLock { _directSubscriptionUsageSyncEnabled = directSubscriptionUsageSyncEnabled }
+    }
+    func set(directSubscriptionUsageRefreshIntervalSeconds: UInt32) {
+        lock.withLock { _directSubscriptionUsageRefreshIntervalSeconds = directSubscriptionUsageRefreshIntervalSeconds }
     }
 
     /// Appends a profile as if `ccm add <name>` had just finished a login in
@@ -146,9 +151,9 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
             return _gatewayModelIndex
         }
     }
-    func getSubscriptionUsageSync(name: String) throws -> SubscriptionUsageSyncView {
+    func getSubscriptionUsageSync(name: String, allowKeychainPrompt: Bool) throws -> SubscriptionUsageSyncView {
         lock.withLock {
-            getSubscriptionUsageSyncCalls.append(name)
+            getSubscriptionUsageSyncCalls.append((name, allowKeychainPrompt))
             return _subscriptionUsageSyncResults[name.lowercased()] ?? SubscriptionUsageSyncView(
                 state: "cannot-verify",
                 message: "OreoDeck could not refresh this profile’s live usage.",
@@ -159,7 +164,8 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
                 weeklyPercent: nil,
                 weeklyResetAtMs: nil,
                 extraUsageSpendUsd: nil,
-                extraUsageLimitUsd: nil
+                extraUsageLimitUsd: nil,
+                limits: []
             )
         }
     }
@@ -170,6 +176,15 @@ final class FakeBackend: CcmBackend, @unchecked Sendable {
         lock.withLock {
             setDirectSubscriptionUsageSyncEnabledCalls.append(enabled)
             _directSubscriptionUsageSyncEnabled = enabled
+        }
+    }
+    func getDirectSubscriptionUsageRefreshIntervalSeconds() throws -> UInt32 {
+        lock.withLock { _directSubscriptionUsageRefreshIntervalSeconds }
+    }
+    func setDirectSubscriptionUsageRefreshIntervalSeconds(seconds: UInt32) throws {
+        lock.withLock {
+            setDirectSubscriptionUsageRefreshIntervalSecondsCalls.append(seconds)
+            _directSubscriptionUsageRefreshIntervalSeconds = seconds
         }
     }
     func removeProfile(name: String) throws {

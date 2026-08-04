@@ -88,6 +88,7 @@ pub enum StoreError {
     Io(String),
     SharedResource(String),
     InvalidTerminal(String),
+    InvalidSubscriptionUsageRefreshInterval(u32),
     InvalidGatewayBaseUrl(String),
     InvalidGatewayModelMappings(String),
 }
@@ -115,6 +116,9 @@ impl StoreError {
             StoreError::InvalidTerminal(value) => format!(
                 "Unsupported terminal \"{value}\". Choose a terminal from OreoDeck Settings."
             ),
+            StoreError::InvalidSubscriptionUsageRefreshInterval(_) => {
+                "Live subscription usage refresh must be between 1 and 60 minutes.".to_string()
+            }
             StoreError::InvalidGatewayBaseUrl(_) => {
                 "Gateway URL must be an absolute HTTPS URL or a loopback HTTP URL, without credentials, a query, or a fragment.".to_string()
             }
@@ -712,6 +716,11 @@ pub fn get_profile(name: &str) -> Result<Option<Profile>, StoreError> {
 }
 
 const DIRECT_SUBSCRIPTION_USAGE_SYNC_KEY: &str = "directSubscriptionUsageSyncEnabled";
+const DIRECT_SUBSCRIPTION_USAGE_REFRESH_INTERVAL_SECONDS_KEY: &str =
+    "directSubscriptionUsageRefreshIntervalSeconds";
+const DEFAULT_DIRECT_SUBSCRIPTION_USAGE_REFRESH_INTERVAL_SECONDS: u32 = 120;
+const MIN_DIRECT_SUBSCRIPTION_USAGE_REFRESH_INTERVAL_SECONDS: u32 = 60;
+const MAX_DIRECT_SUBSCRIPTION_USAGE_REFRESH_INTERVAL_SECONDS: u32 = 3_600;
 
 /// Experimental direct OAuth usage sync is opt-in. Store it in Config.extra
 /// so older CLIs preserve the flag instead of needing a coordinated schema
@@ -732,6 +741,46 @@ pub fn set_direct_subscription_usage_sync_enabled(enabled: bool) -> Result<(), S
         );
         Ok(())
     })
+}
+
+/// The automatic refresh cadence stays bounded even if config.json was edited
+/// by hand. Invalid or missing values safely fall back to the two-minute
+/// default, and all callers use whole seconds to avoid a surprise busy loop.
+pub fn direct_subscription_usage_refresh_interval_seconds() -> Result<u32, StoreError> {
+    let value = load_config()?
+        .extra
+        .get(DIRECT_SUBSCRIPTION_USAGE_REFRESH_INTERVAL_SECONDS_KEY)
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|value| u32::try_from(value).ok());
+    Ok(value
+        .filter(|value| {
+            (*value >= MIN_DIRECT_SUBSCRIPTION_USAGE_REFRESH_INTERVAL_SECONDS)
+                && (*value <= MAX_DIRECT_SUBSCRIPTION_USAGE_REFRESH_INTERVAL_SECONDS)
+        })
+        .unwrap_or(DEFAULT_DIRECT_SUBSCRIPTION_USAGE_REFRESH_INTERVAL_SECONDS))
+}
+
+pub fn set_direct_subscription_usage_refresh_interval_seconds(
+    seconds: u32,
+) -> Result<(), StoreError> {
+    guard_subscription_usage_refresh_interval(seconds)?;
+    update_config(|config| {
+        config.extra.insert(
+            DIRECT_SUBSCRIPTION_USAGE_REFRESH_INTERVAL_SECONDS_KEY.to_string(),
+            serde_json::Value::from(seconds),
+        );
+        Ok(())
+    })
+}
+
+fn guard_subscription_usage_refresh_interval(seconds: u32) -> Result<(), StoreError> {
+    if !(MIN_DIRECT_SUBSCRIPTION_USAGE_REFRESH_INTERVAL_SECONDS
+        ..=MAX_DIRECT_SUBSCRIPTION_USAGE_REFRESH_INTERVAL_SECONDS)
+        .contains(&seconds)
+    {
+        return Err(StoreError::InvalidSubscriptionUsageRefreshInterval(seconds));
+    }
+    Ok(())
 }
 
 fn add_profile_record(
@@ -984,6 +1033,30 @@ mod tests {
             serde_json::json!(true)
         );
         assert_eq!(raw["telemetryOptIn"], serde_json::json!(false));
+    }
+
+    #[test]
+    #[serial]
+    fn direct_subscription_usage_refresh_interval_defaults_validates_and_persists() {
+        let dir = tempfile::tempdir().unwrap();
+        set_home(dir.path());
+
+        assert_eq!(
+            direct_subscription_usage_refresh_interval_seconds().unwrap(),
+            120
+        );
+        set_direct_subscription_usage_refresh_interval_seconds(600).unwrap();
+        assert_eq!(
+            direct_subscription_usage_refresh_interval_seconds().unwrap(),
+            600
+        );
+        assert!(set_direct_subscription_usage_refresh_interval_seconds(30).is_err());
+        assert_eq!(
+            direct_subscription_usage_refresh_interval_seconds().unwrap(),
+            600
+        );
+
+        env::remove_var("CCM_HOME");
     }
 
     #[test]

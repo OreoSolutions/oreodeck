@@ -63,13 +63,44 @@ import Testing
 @MainActor
 @Test func popoverVisualRender() async throws {
     guard let output = ProcessInfo.processInfo.environment["OREODECK_POPOVER_QA_PATH"] else { return }
-    let model = AppModel(backend: FakeBackend())
+    let backend = FakeBackend()
+    backend.set(
+        profiles: [
+            ProfileView(name: "work", kind: "subscription", active: true),
+            ProfileView(name: "openai", kind: "gateway", active: false),
+        ],
+        usage: [
+            ProfileUsageView(
+                profile: "work", kind: "subscription",
+                inputTokens: 0, cacheWrite5mTokens: 0, cacheWrite1hTokens: 0,
+                cacheReadTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0,
+                resetAtMs: nil, planFiveHourPercent: 1, planFiveHourResetAtMs: 3_600_000,
+                planWeeklyPercent: 2, planWeeklyResetAtMs: 176_400_000,
+                planUsageFetchedAtMs: 0
+            ),
+        ]
+    )
+    backend.set(subscriptionUsageSync: SubscriptionUsageSyncView(
+        state: "connected",
+        message: "Connected — subscription usage is live.",
+        fetchedAtMs: 0,
+        retryAfterMs: nil,
+        fiveHourPercent: 8,
+        fiveHourResetAtMs: 7_200_000,
+        weeklyPercent: 96,
+        weeklyResetAtMs: 352_800_000,
+        extraUsageSpendUsd: nil,
+        extraUsageLimitUsd: nil,
+        limits: []
+    ), for: "work")
+    let model = AppModel(backend: backend)
     await model.load()
+    await model.refreshSubscriptionUsage(name: "work", force: true)
     let root = MenuBarView(model: model, openDashboard: {})
-        .frame(width: 350, height: 275)
+        .frame(width: 320, height: 255)
         .preferredColorScheme(.dark)
     let hosting = NSHostingView(rootView: root)
-    hosting.frame = NSRect(x: 0, y: 0, width: 350, height: 275)
+    hosting.frame = NSRect(x: 0, y: 0, width: 320, height: 255)
     let window = NSWindow(
         contentRect: hosting.frame,
         styleMask: [.borderless],
@@ -229,6 +260,65 @@ import Testing
     hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
     guard let png = bitmap.representation(using: .png, properties: [:]) else {
         Issue.record("Gateway profile detail bitmap could not be encoded as PNG")
+        return
+    }
+    try png.write(to: URL(fileURLWithPath: output))
+}
+
+/// OREODECK_SUBSCRIPTION_DETAIL_QA_PATH=/tmp/oreodeck-subscription-detail.png swift test ... --filter subscriptionProfileDetailVisualRender
+@MainActor
+@Test func subscriptionProfileDetailVisualRender() async throws {
+    guard let output = ProcessInfo.processInfo.environment["OREODECK_SUBSCRIPTION_DETAIL_QA_PATH"] else { return }
+    let backend = FakeBackend()
+    backend.set(
+        profiles: [ProfileView(name: "work", kind: "subscription", active: true)],
+        usage: [
+            ProfileUsageView(
+                profile: "work", kind: "subscription",
+                inputTokens: 0, cacheWrite5mTokens: 0, cacheWrite1hTokens: 0,
+                cacheReadTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0,
+                resetAtMs: nil, planFiveHourPercent: 1, planFiveHourResetAtMs: 3_600_000,
+                planWeeklyPercent: 2, planWeeklyResetAtMs: 176_400_000,
+                planUsageFetchedAtMs: 0
+            ),
+        ]
+    )
+    backend.set(subscriptionUsageSync: SubscriptionUsageSyncView(
+        state: "connected",
+        message: "Connected — subscription usage is live.",
+        fetchedAtMs: 0,
+        retryAfterMs: nil,
+        fiveHourPercent: 8,
+        fiveHourResetAtMs: 7_200_000,
+        weeklyPercent: 96,
+        weeklyResetAtMs: 352_800_000,
+        extraUsageSpendUsd: nil,
+        extraUsageLimitUsd: nil,
+        limits: []
+    ), for: "work")
+    let model = AppModel(backend: backend)
+    await model.load()
+    await model.refreshSubscriptionUsage(name: "work", force: true)
+    let root = ProfilesTab(model: model, initialSelection: "work")
+        .padding(24)
+        .frame(width: 1120, height: 620, alignment: .topLeading)
+        .background(OreoTheme.canvas)
+        .preferredColorScheme(.dark)
+    let hosting = NSHostingView(rootView: root)
+    hosting.frame = NSRect(x: 0, y: 0, width: 1120, height: 620)
+    let window = NSWindow(contentRect: hosting.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+    window.contentView = hosting
+    window.makeKeyAndOrderFront(nil)
+    window.layoutIfNeeded()
+    hosting.layoutSubtreeIfNeeded()
+    try await Task.sleep(for: .milliseconds(100))
+    guard let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else {
+        Issue.record("Subscription profile detail could not be rendered to PNG")
+        return
+    }
+    hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else {
+        Issue.record("Subscription profile detail bitmap could not be encoded as PNG")
         return
     }
     try png.write(to: URL(fileURLWithPath: output))

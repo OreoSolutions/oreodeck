@@ -14,6 +14,25 @@ import ViewInspector
     #expect(try UsageTab(model: model).inspect().find(text: "Current profile").string() == "Current profile")
 }
 
+@MainActor
+@Test func activeProfileUsageRendersOnlyInsideTheCurrentProfileCard() async throws {
+    let backend = FakeBackend()
+    backend.set(profiles: [
+        ProfileView(name: "work", kind: "subscription", active: true),
+        ProfileView(name: "openai", kind: "gateway", active: false),
+    ])
+    let model = AppModel(backend: backend)
+    await model.load()
+
+    let tab = UsageTab(model: model)
+    #expect(try tab.inspect().find(text: "Current profile").string() == "Current profile")
+    #expect(try tab.inspect().find(text: "Live Claude usage").string() == "Live Claude usage")
+    #expect(throws: (any Error).self) {
+        try tab.inspect().find(text: "Active profile")
+    }
+    #expect(try tab.inspect().find(text: "Profile usage").string() == "Profile usage")
+}
+
 // Not the drag/bar-color pixel behavior — that has no automated equivalent
 // (see the Task 4 brief and docs/manual-smoke-test.md) — but the text-level
 // facts a regression can silently break: the empty state, the per-layer
@@ -95,7 +114,7 @@ import ViewInspector
 }
 
 @MainActor
-@Test func aZeroUsageSubscriptionRowRendersDashesNotCrashesOrNaN() async throws {
+@Test func aZeroUsageSubscriptionRowExplainsHowToFetchItsFirstLiveSnapshot() async throws {
     // A subscription without Claude's account cache must be honest about the
     // missing data instead of deriving a fake reset from local transcripts.
     let backend = FakeBackend()
@@ -104,34 +123,23 @@ import ViewInspector
     await model.load()
 
     let tab = UsageTab(model: model)
-    #expect(try tab.inspect().find(text: "Not available").string() == "Not available")
-    #expect(try tab.inspect().find(text: "resets in —").string() == "resets in —")
-    #expect(try tab.inspect().find(text: "No Claude usage cache yet. Open this profile in Claude and run /usage.").string()
-        == "No Claude usage cache yet. Open this profile in Claude and run /usage.")
+    #expect(try tab.inspect().find(button: "Refresh usage").isDisabled() == false)
+    #expect(try tab.inspect().find(text: "No live usage yet. Refresh to connect through Claude OAuth.").string()
+        == "No live usage yet. Refresh to connect through Claude OAuth.")
+    #expect(throws: (any Error).self) {
+        try tab.inspect().find(text: "Not available")
+    }
 }
 
 @MainActor
-@Test func aLiveSubscriptionResultIsLabeledAndUsedInsteadOfTheClaudeCache() async throws {
+@Test func subscriptionUsageShowsLiveOAuthRefreshStateAlongsideClaudeSnapshot() async throws {
     let backend = FakeBackend()
-    backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)])
-    backend.set(directSubscriptionUsageSyncEnabled: true)
-    backend.set(subscriptionUsageSync: SubscriptionUsageSyncView(
-        state: "connected",
-        message: "Connected — subscription usage is live.",
-        fetchedAtMs: 1_700_000_000_000,
-        retryAfterMs: nil,
-        fiveHourPercent: 37,
-        fiveHourResetAtMs: nil,
-        weeklyPercent: 12,
-        weeklyResetAtMs: nil,
-        extraUsageSpendUsd: 2.5,
-        extraUsageLimitUsd: 10
-    ), for: "work")
+    backend.set(profiles: [ProfileView(name: "work", kind: "subscription", active: true)], usage: [ProfileUsageView(profile: "work", kind: "subscription", inputTokens: 0, cacheWrite5mTokens: 0, cacheWrite1hTokens: 0, cacheReadTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, resetAtMs: nil, planFiveHourPercent: 37, planFiveHourResetAtMs: nil, planWeeklyPercent: 12, planWeeklyResetAtMs: nil, planUsageFetchedAtMs: 1_700_000_000_000)])
     let model = AppModel(backend: backend)
     await model.load()
 
     let tab = UsageTab(model: model)
-    #expect(try tab.inspect().find(text: "Live subscription usage").string() == "Live subscription usage")
+    #expect(try tab.inspect().find(text: "Live Claude usage").string() == "Live Claude usage")
     #expect(try tab.inspect().find(text: "37% used").string() == "37% used")
-    #expect(try tab.inspect().find(text: "$2.50 of $10.00 extra usage").string() == "$2.50 of $10.00 extra usage")
+    #expect(try tab.inspect().find(text: "Last snapshot").string() == "Last snapshot")
 }

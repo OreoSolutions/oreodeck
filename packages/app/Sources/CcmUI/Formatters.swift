@@ -28,6 +28,13 @@ public func formatCountdown(resetAtMs: Int64?, nowMs: Int64) -> String {
     return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
 }
 
+/// Profiles is a dense scanning table, so a subscription row leads with the
+/// longer weekly quota. The full 5-hour and extra-usage breakdown remains in
+/// the selected profile and Usage surfaces.
+public func formatSubscriptionWeeklyUsage(_ percent: Double?) -> String {
+    percent.map { "\(Int($0.rounded()))% (weekly)" } ?? "—"
+}
+
 public func formatAge(timestampMs: Int64, nowMs: Int64) -> String {
     let minutes = max(0, (nowMs - timestampMs) / 60_000)
     if minutes < 1 { return "now" }

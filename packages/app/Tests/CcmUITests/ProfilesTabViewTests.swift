@@ -25,6 +25,83 @@ import ViewInspector
 }
 
 @MainActor
+@Test func subscriptionProfileListPrioritizesWeeklyUsageAndItsWeeklyReset() async throws {
+    #expect(formatSubscriptionWeeklyUsage(52) == "52% (weekly)")
+    #expect(formatSubscriptionWeeklyUsage(nil) == "—")
+}
+
+@MainActor
+@Test func selectedSubscriptionStatusShowsLiveWindowsAndTheirResetTimes() throws {
+    let status = SubscriptionUsageSyncStatus(
+        row: ProfileRow(
+            name: "work", kind: "subscription", active: true,
+            planFiveHourPercent: 3, planFiveHourResetAtMs: 1_800_000,
+            planWeeklyPercent: 4, planWeeklyResetAtMs: 172_800_000
+        ),
+        sync: SubscriptionUsageSyncView(
+            state: "connected",
+            message: "Connected — subscription usage is live.",
+            fetchedAtMs: 0,
+            retryAfterMs: nil,
+            fiveHourPercent: 37,
+            fiveHourResetAtMs: 3_600_000,
+            weeklyPercent: 12,
+            weeklyResetAtMs: 176_400_000,
+            extraUsageSpendUsd: 2.5,
+            extraUsageLimitUsd: 10,
+            limits: []
+        ),
+        nowMs: 0,
+        refresh: {},
+        loginAgain: {}
+    )
+
+    let inspected = try status.inspect()
+    #expect(inspected.findAll(ViewType.ProgressView.self).count == 2)
+    #expect(try inspected.find(text: "5-hour").string() == "5-hour")
+    #expect(try inspected.find(text: "37% used").string() == "37% used")
+    #expect(try inspected.find(text: "Resets in 1h 0m").string() == "Resets in 1h 0m")
+    #expect(try inspected.find(text: "Weekly").string() == "Weekly")
+    #expect(try inspected.find(text: "12% used").string() == "12% used")
+    #expect(try inspected.find(text: "Resets in 2d 1h").string() == "Resets in 2d 1h")
+    #expect(try inspected.find(text: "$2.50 of $10.00 extra usage").string() == "$2.50 of $10.00 extra usage")
+}
+
+@MainActor
+@Test func selectedSubscriptionStatusKeepsCachedResetTimesVisibleWhenLiveOAuthCannotRefresh() throws {
+    let status = SubscriptionUsageSyncStatus(
+        row: ProfileRow(
+            name: "work", kind: "subscription", active: true,
+            planFiveHourPercent: 20, planFiveHourResetAtMs: 7_200_000,
+            planWeeklyPercent: 95, planWeeklyResetAtMs: 176_400_000,
+            planUsageFetchedAtMs: 0
+        ),
+        sync: SubscriptionUsageSyncView(
+            state: "cannot-verify",
+            message: "OreoDeck could not safely read this profile's login state.",
+            fetchedAtMs: nil,
+            retryAfterMs: nil,
+            fiveHourPercent: nil,
+            fiveHourResetAtMs: nil,
+            weeklyPercent: nil,
+            weeklyResetAtMs: nil,
+            extraUsageSpendUsd: nil,
+            extraUsageLimitUsd: nil,
+            limits: []
+        ),
+        nowMs: 0,
+        refresh: {},
+        loginAgain: {}
+    )
+
+    let inspected = try status.inspect()
+    #expect(try inspected.find(text: "20% used").string() == "20% used")
+    #expect(try inspected.find(text: "Resets in 2h 0m").string() == "Resets in 2h 0m")
+    #expect(try inspected.find(text: "95% used").string() == "95% used")
+    #expect(try inspected.find(text: "Resets in 2d 1h").string() == "Resets in 2d 1h")
+}
+
+@MainActor
 @Test func selectedGatewayProfileCanScrollWhenItsDetailsExceedTheWindow() async throws {
     let backend = FakeBackend()
     backend.set(profiles: [

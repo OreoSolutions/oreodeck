@@ -46,6 +46,7 @@ public final class AppModel: ObservableObject {
     /// by profile name. OAuth tokens never enter this model or SwiftUI.
     @Published public private(set) var subscriptionUsageSyncs: [String: SubscriptionUsageSyncView] = [:]
     @Published public private(set) var directSubscriptionUsageSyncEnabled = false
+    @Published public private(set) var directSubscriptionUsageRefreshIntervalSeconds: UInt32 = 120
     /// Name of the subscription profile whose Terminal login we're polling for.
     @Published public private(set) var pendingSubscription: String?
     /// Refreshed on every load so countdowns re-render without their own clock.
@@ -64,7 +65,6 @@ public final class AppModel: ObservableObject {
     private var subscriptionUsageInFlight: Set<String> = []
     private var subscriptionUsageAuthStopped: Set<String> = []
 
-    private static let automaticSubscriptionUsageIntervalMs: Int64 = 120_000
     private static let manualSubscriptionUsageIntervalMs: Int64 = 15_000
 
     public init(backend: CcmBackend) {
@@ -107,7 +107,8 @@ public final class AppModel: ObservableObject {
                 let failover = try backend.getFailover()
                 let terminal = try backend.getTerminal()
                 let directSyncEnabled = try backend.getDirectSubscriptionUsageSyncEnabled()
-                return (cliInstalled, profiles, usage, failover, terminal, directSyncEnabled)
+                let directSyncInterval = try backend.getDirectSubscriptionUsageRefreshIntervalSeconds()
+                return (cliInstalled, profiles, usage, failover, terminal, directSyncEnabled, directSyncInterval)
             }.value
             guard loadID == latestLoadID else { return }
             cliMissing = !result.0
@@ -115,9 +116,10 @@ public final class AppModel: ObservableObject {
             failover = result.3
             terminal = result.4
             directSubscriptionUsageSyncEnabled = result.5
+            directSubscriptionUsageRefreshIntervalSeconds = result.6
+            loadError = nil
             let availableProfiles = Set(rows.map { $0.name.lowercased() })
             subscriptionUsageSyncs = subscriptionUsageSyncs.filter { availableProfiles.contains($0.key.lowercased()) }
-            loadError = nil
             await refreshEligibleSubscriptionUsage()
         } catch let error as CcmError {
             guard loadID == latestLoadID else { return }
@@ -187,14 +189,14 @@ public final class AppModel: ObservableObject {
     }
 
     /// Fetches one profile's display-safe subscription limits. `force` is for
-    /// an explicit user refresh; automatic refresh remains on the two-minute
-    /// cadence and never continues after a sign-in failure.
+    /// an explicit user refresh; it is the only flow allowed to ask macOS for
+    /// Claude Code Keychain access. Automatic refreshes remain noninteractive.
     public func refreshSubscriptionUsage(name: String, force: Bool = false) async {
         let key = name.lowercased()
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let minimumInterval = force
             ? Self.manualSubscriptionUsageIntervalMs
-            : Self.automaticSubscriptionUsageIntervalMs
+            : Int64(directSubscriptionUsageRefreshIntervalSeconds) * 1_000
         guard !subscriptionUsageInFlight.contains(key),
               force || directSubscriptionUsageSyncEnabled,
               !(subscriptionUsageAuthStopped.contains(key) && !force)
@@ -219,17 +221,18 @@ public final class AppModel: ObservableObject {
             weeklyPercent: subscriptionUsageSyncs[name]?.weeklyPercent,
             weeklyResetAtMs: subscriptionUsageSyncs[name]?.weeklyResetAtMs,
             extraUsageSpendUsd: subscriptionUsageSyncs[name]?.extraUsageSpendUsd,
-            extraUsageLimitUsd: subscriptionUsageSyncs[name]?.extraUsageLimitUsd
+            extraUsageLimitUsd: subscriptionUsageSyncs[name]?.extraUsageLimitUsd,
+            limits: subscriptionUsageSyncs[name]?.limits ?? []
         )
 
         let backend = self.backend
         defer { subscriptionUsageInFlight.remove(key) }
         do {
             let result = try await Task.detached {
-                try backend.getSubscriptionUsageSync(name: name)
+                try backend.getSubscriptionUsageSync(name: name, allowKeychainPrompt: force)
             }.value
             subscriptionUsageSyncs[name] = result
-            if result.state == "needs-sign-in" {
+            if ["needs-sign-in", "oauth-mcp-only", "oauth-missing-scope", "keychain-access-needed"].contains(result.state) {
                 subscriptionUsageAuthStopped.insert(key)
             }
             if result.state == "rate-limited", let retryAfter = result.retryAfterMs {
@@ -246,9 +249,10 @@ public final class AppModel: ObservableObject {
                 fiveHourPercent: nil,
                 fiveHourResetAtMs: nil,
                 weeklyPercent: nil,
-                weeklyResetAtMs: nil,
-                extraUsageSpendUsd: nil,
-                extraUsageLimitUsd: nil
+            weeklyResetAtMs: nil,
+            extraUsageSpendUsd: nil,
+            extraUsageLimitUsd: nil,
+            limits: []
             )
         }
     }
@@ -268,6 +272,21 @@ public final class AppModel: ObservableObject {
             actionError = message(for: error)
         } catch {
             actionError = "The direct subscription usage setting could not be saved."
+        }
+    }
+
+    public func setDirectSubscriptionUsageRefreshIntervalSeconds(_ seconds: UInt32) async {
+        let backend = self.backend
+        do {
+            try await Task.detached {
+                try backend.setDirectSubscriptionUsageRefreshIntervalSeconds(seconds: seconds)
+            }.value
+            directSubscriptionUsageRefreshIntervalSeconds = seconds
+            actionError = nil
+        } catch let error as CcmError {
+            actionError = message(for: error)
+        } catch {
+            actionError = "The live subscription refresh interval could not be saved."
         }
     }
 

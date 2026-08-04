@@ -20,9 +20,11 @@ public protocol CcmBackend: Sendable {
     func updateGatewayModelMappings(name: String, modelMappings: GatewayModelMappings) throws
     func checkGatewayConnection(name: String) throws -> GatewayConnectionView
     func probeGatewayModels(baseUrl: String, key: String) throws -> GatewayModelIndexView
-    func getSubscriptionUsageSync(name: String) throws -> SubscriptionUsageSyncView
+    func getSubscriptionUsageSync(name: String, allowKeychainPrompt: Bool) throws -> SubscriptionUsageSyncView
     func getDirectSubscriptionUsageSyncEnabled() throws -> Bool
     func setDirectSubscriptionUsageSyncEnabled(enabled: Bool) throws
+    func getDirectSubscriptionUsageRefreshIntervalSeconds() throws -> UInt32
+    func setDirectSubscriptionUsageRefreshIntervalSeconds(seconds: UInt32) throws
     func removeProfile(name: String) throws
     func getFailover() throws -> FailoverView
     func setFailoverEnabled(on: Bool) throws
@@ -63,14 +65,20 @@ public struct LiveBackend: CcmBackend {
     public func probeGatewayModels(baseUrl: String, key: String) throws -> GatewayModelIndexView {
         try CcmKit.probeGatewayModels(baseUrl: baseUrl, key: key)
     }
-    public func getSubscriptionUsageSync(name: String) throws -> SubscriptionUsageSyncView {
-        try CcmKit.getSubscriptionUsageSync(name: name)
+    public func getSubscriptionUsageSync(name: String, allowKeychainPrompt: Bool) throws -> SubscriptionUsageSyncView {
+        try CcmKit.getSubscriptionUsageSync(name: name, allowKeychainPrompt: allowKeychainPrompt)
     }
     public func getDirectSubscriptionUsageSyncEnabled() throws -> Bool {
         try CcmKit.getDirectSubscriptionUsageSyncEnabled()
     }
     public func setDirectSubscriptionUsageSyncEnabled(enabled: Bool) throws {
         try CcmKit.setDirectSubscriptionUsageSyncEnabled(enabled: enabled)
+    }
+    public func getDirectSubscriptionUsageRefreshIntervalSeconds() throws -> UInt32 {
+        try CcmKit.getDirectSubscriptionUsageRefreshIntervalSeconds()
+    }
+    public func setDirectSubscriptionUsageRefreshIntervalSeconds(seconds: UInt32) throws {
+        try CcmKit.setDirectSubscriptionUsageRefreshIntervalSeconds(seconds: seconds)
     }
     public func removeProfile(name: String) throws { try CcmKit.removeProfile(name: name) }
     public func getFailover() throws -> FailoverView { try CcmKit.getFailover() }

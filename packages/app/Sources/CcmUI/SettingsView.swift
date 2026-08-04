@@ -57,6 +57,7 @@ public struct SettingsView: View {
             id: "wave", name: "Wave Terminal",
             subtitle: "Window only — run the OreoDeck command manually.", icon: "waveform", supportsCommands: false),
     ]
+    private let subscriptionRefreshIntervals: [UInt32] = [120, 300, 600, 900, 1_800]
 
     public init(model: AppModel) {
         self.model = model
@@ -86,24 +87,40 @@ public struct SettingsView: View {
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack(spacing: 7) {
                                     Text("Live subscription usage").font(.headline)
-                                    StatusPill(text: "Experimental", color: .orange)
+                                    StatusPill(text: "Claude OAuth", color: OreoTheme.terracotta)
                                 }
-                                Text("Check the selected Claude subscription directly while OreoDeck is open. OAuth credentials stay on this Mac and are never shown in the app.")
+                                Text("Read usage directly from Claude OAuth. Credentials remain in Claude Code's Keychain and never enter OreoDeck's UI.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
-                            Spacer(minLength: 12)
-                            Toggle("Live subscription usage", isOn: Binding(
-                                get: { model.directSubscriptionUsageSyncEnabled },
-                                set: { enabled in Task { await model.setDirectSubscriptionUsageSyncEnabled(enabled) } }
-                            ))
-                            .labelsHidden()
-                            .accessibilityLabel("Enable live subscription usage")
                         }
-                        Text("Refreshes at most once every two minutes, stops automatically when sign-in is needed, and can be refreshed manually every 15 seconds.")
+                        Toggle("Refresh live usage while OreoDeck is open", isOn: Binding(
+                            get: { model.directSubscriptionUsageSyncEnabled },
+                            set: { enabled in Task { await model.setDirectSubscriptionUsageSyncEnabled(enabled) } }
+                        ))
+                        .toggleStyle(.switch)
+                        Text("Background refresh never opens a Keychain prompt. Use Refresh usage in a profile to grant access or resolve sign-in.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Refresh interval").font(.subheadline.weight(.semibold))
+                                Text("Check OAuth usage at this interval while an OreoDeck window is open.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Picker("Refresh interval", selection: Binding(
+                                get: { model.directSubscriptionUsageRefreshIntervalSeconds },
+                                set: { seconds in Task { await model.setDirectSubscriptionUsageRefreshIntervalSeconds(seconds) } }
+                            )) {
+                                ForEach(subscriptionRefreshIntervals, id: \.self) { seconds in
+                                    Text(refreshIntervalLabel(seconds)).tag(seconds)
+                                }
+                            }
+                            .frame(width: 130)
+                        }
                     }
                 }
 
@@ -289,6 +306,10 @@ public struct SettingsView: View {
 
     private var selectedTerminalName: String {
         selectedTerminal?.name ?? "Terminal.app"
+    }
+
+    private func refreshIntervalLabel(_ seconds: UInt32) -> String {
+        "\(seconds / 60) min"
     }
 
     private var selectedTerminal: TerminalOption? {

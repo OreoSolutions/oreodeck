@@ -46,8 +46,8 @@ public struct ProfilesTab: View {
                     color: .green
                 )
                 summaryCard(
-                    title: "Active 5h usage",
-                    value: model.rows.first(where: \.active)?.planFiveHourPercent
+                    title: "Active weekly usage",
+                    value: activeSubscriptionWeeklyUsage
                         .map { "\(Int($0.rounded()))%" } ?? "—",
                     icon: "chart.bar.fill",
                     color: .purple
@@ -84,18 +84,18 @@ public struct ProfilesTab: View {
                     TableColumn("Kind") { row in
                         Text(row.kind == "api-key" ? "API key" : row.kind == "gateway" ? "Gateway" : "Subscription")
                     }
-                    TableColumn("Usage") { row in
+                    TableColumn("Weekly usage") { row in
                         Text(row.kind == "subscription"
-                            ? row.planFiveHourPercent.map { "\(Int($0.rounded()))% (5h)" } ?? "—"
+                            ? formatSubscriptionWeeklyUsage(subscriptionWeeklyUsage(for: row))
                             : "\(formatTokens(row.totalTokens)) tokens")
                             .monospacedDigit()
                     }
                     TableColumn("Cost") { row in
                         Text(formatCost(kind: row.kind, costUsd: row.costUsd)).monospacedDigit()
                     }
-                    TableColumn("Resets in") { row in
+                    TableColumn("Weekly reset") { row in
                         Text(formatCountdown(
-                            resetAtMs: row.kind == "subscription" ? row.planFiveHourResetAtMs : nil,
+                            resetAtMs: row.kind == "subscription" ? subscriptionWeeklyReset(for: row) : nil,
                             nowMs: model.nowMs
                         ))
                             .monospacedDigit()
@@ -107,8 +107,7 @@ public struct ProfilesTab: View {
                     ProfileDetailCard(
                         row: selectedRow,
                         connection: model.gatewayConnections[selectedRow.name],
-                        subscriptionSync: model.subscriptionUsageSyncs[selectedRow.name],
-                        directSubscriptionSyncEnabled: model.directSubscriptionUsageSyncEnabled,
+                        subscriptionUsage: model.subscriptionUsageSyncs[selectedRow.name],
                         nowMs: model.nowMs,
                         checkConnection: { Task { await model.checkGatewayConnection(name: selectedRow.name) } },
                         refreshSubscriptionUsage: { Task { await model.refreshSubscriptionUsage(name: selectedRow.name, force: true) } },
@@ -261,6 +260,28 @@ public struct ProfilesTab: View {
         min(270, max(150, CGFloat(model.rows.count) * 32 + 42))
     }
 
+    private var activeSubscriptionWeeklyUsage: Double? {
+        guard let active = model.rows.first(where: \.active), active.kind == "subscription" else {
+            return nil
+        }
+        return subscriptionWeeklyUsage(for: active)
+    }
+
+    /// The list is a scanning surface, so subscription profiles lead with the
+    /// longer weekly quota. The selected Profile and Usage surfaces retain the
+    /// complete 5-hour, weekly, and extra-usage breakdown.
+    private func subscriptionWeeklyUsage(for row: ProfileRow) -> Double? {
+        subscriptionUsageDisplay(for: row).weeklyPercent
+    }
+
+    private func subscriptionWeeklyReset(for row: ProfileRow) -> Int64? {
+        subscriptionUsageDisplay(for: row).weeklyResetAtMs
+    }
+
+    private func subscriptionUsageDisplay(for row: ProfileRow) -> SubscriptionUsageDisplay {
+        SubscriptionUsageDisplay(row: row, sync: model.subscriptionUsageSyncs[row.name])
+    }
+
     private func summaryCard(title: String, value: String, icon: String, color: Color) -> some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
@@ -290,8 +311,7 @@ public struct ProfilesTab: View {
 private struct ProfileDetailCard: View {
     let row: ProfileRow
     let connection: GatewayConnectionView?
-    let subscriptionSync: SubscriptionUsageSyncView?
-    let directSubscriptionSyncEnabled: Bool
+    let subscriptionUsage: SubscriptionUsageSyncView?
     let nowMs: Int64
     let checkConnection: () -> Void
     let refreshSubscriptionUsage: () -> Void
@@ -333,8 +353,8 @@ private struct ProfileDetailCard: View {
                 }
             } else if row.kind == "subscription" {
                 SubscriptionUsageSyncStatus(
-                    sync: subscriptionSync,
-                    enabled: directSubscriptionSyncEnabled,
+                    row: row,
+                    sync: subscriptionUsage,
                     nowMs: nowMs,
                     refresh: refreshSubscriptionUsage,
                     loginAgain: loginAgain
