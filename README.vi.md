@@ -7,7 +7,7 @@
 [![Website](https://img.shields.io/badge/website-oreodeck.vercel.app-5C4033?logo=safari&logoColor=white)](https://oreodeck.vercel.app)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/nguyenhuyquang)
 
-<p align="center"><img src="assets/brand/generated/oreodeck-mark-transparent-1024.png" alt="Logo OreoDeck" width="128"></p>
+<p align="center"><img src="assets/brand/generated/oreodeck-mark-transparent-1024.png" alt="Logo Layered Bloom của OreoDeck" width="128"></p>
 
 <p align="center">Ứng dụng macOS và CLI để quản lý nhiều profile Claude Code được cô lập.<br><a href="https://oreodeck.vercel.app">Ghé thăm website OreoDeck</a></p>
 

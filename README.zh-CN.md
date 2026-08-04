@@ -7,7 +7,7 @@
 [![Website](https://img.shields.io/badge/website-oreodeck.vercel.app-5C4033?logo=safari&logoColor=white)](https://oreodeck.vercel.app)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/nguyenhuyquang)
 
-<p align="center"><img src="assets/brand/generated/oreodeck-mark-transparent-1024.png" alt="OreoDeck 标志" width="128"></p>
+<p align="center"><img src="assets/brand/generated/oreodeck-mark-transparent-1024.png" alt="OreoDeck Layered Bloom 标志" width="128"></p>
 
 <p align="center">用于管理多个相互隔离的 Claude Code 配置档案的 macOS 应用和 CLI。<br><a href="https://oreodeck.vercel.app">访问 OreoDeck 网站</a></p>
 

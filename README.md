@@ -8,7 +8,7 @@ English | [Tiếng Việt](README.vi.md) | [简体中文](README.zh-CN.md)
 [![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/nguyenhuyquang)
 
 <p align="center">
-  <img src="assets/brand/generated/oreodeck-mark-transparent-1024.png" alt="OreoDeck logo" width="128">
+  <img src="assets/brand/generated/oreodeck-mark-transparent-1024.png" alt="OreoDeck Layered Bloom logo" width="128">
 </p>
 
 <p align="center">
